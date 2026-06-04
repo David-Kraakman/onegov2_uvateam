@@ -136,9 +136,11 @@ export function SimulationConfiguration({ config, network, dataFactors, onConfig
               ))}
             </div>
 
-            <div className="sticky bottom-0 mt-6 flex justify-end bg-black/70 py-4 backdrop-blur">
-              <button className="control-button" onClick={onRun}><Play size={16} /> Run Sim</button>
-            </div>
+            <div className="sticky bottom-0 mt-6 flex justify-end py-4">
+  <button className="control-button" onClick={onRun}>
+    <Play size={16} /> Start Sim
+  </button>
+</div>
           </div>
         </div>
       </div>
