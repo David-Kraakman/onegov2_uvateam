@@ -3,18 +3,40 @@ import { Activity, Database, FileUp, Play } from 'lucide-react';
 import { AnimatedTitle, Field, Range, SectionTitle } from '../components/FormControls';
 import { DataFactorRow } from '../components/DataFactorRow';
 import { factorLabels } from '../constants/appConstants';
-import type { DataFactor } from '../types';
+import type { DataFactor, NetworkData, SimulationConfig } from '../types';
+import { parseNetworkFile } from '../utils/networkParser';
 
 type SimulationConfigurationProps = {
+  config: SimulationConfig;
+  network: NetworkData | null;
+  onConfigChange: (config: SimulationConfig) => void;
+  onNetworkLoaded: (network: NetworkData) => void;
   onRun: () => void;
 };
 
-export function SimulationConfiguration({ onRun }: SimulationConfigurationProps) {
+export function SimulationConfiguration({ config, network, onConfigChange, onNetworkLoaded, onRun }: SimulationConfigurationProps) {
   const [immune, setImmune] = React.useState(true);
-  const [networkFileName, setNetworkFileName] = React.useState('');
+  const [networkStatus, setNetworkStatus] = React.useState('');
   const [dataFactors, setDataFactors] = React.useState<DataFactor[]>(
     factorLabels.map((label, index) => ({ label, enabled: index < 10, weight: index % 4 === 0 ? 1.4 : 1 })),
   );
+
+  const updateConfig = (patch: Partial<SimulationConfig>) => {
+    onConfigChange({ ...config, ...patch });
+  };
+
+  const handleNetworkUpload = async (file: File | undefined) => {
+    if (!file) return;
+
+    setNetworkStatus('Netwerk wordt ingelezen...');
+    try {
+      const parsedNetwork = await parseNetworkFile(file);
+      onNetworkLoaded(parsedNetwork);
+      setNetworkStatus(`${parsedNetwork.fileName} geladen: ${parsedNetwork.nodes.length} knopen, ${parsedNetwork.edges.length} verbindingen`);
+    } catch (error) {
+      setNetworkStatus(error instanceof Error ? error.message : 'Netwerkbestand kon niet worden gelezen.');
+    }
+  };
 
   const updateFactor = (index: number, patch: Partial<DataFactor>) => {
     setDataFactors((current) => current.map((factor, factorIndex) => factorIndex === index ? { ...factor, ...patch } : factor));
@@ -31,7 +53,7 @@ export function SimulationConfiguration({ onRun }: SimulationConfigurationProps)
               <Field label="Netwerk" hint="Voeg hier een netwerkbestand toe in JSON- of CSV-formaat.">
                 <label className="flex min-h-[48px] cursor-pointer items-center justify-between gap-3 rounded-lg border border-white/15 bg-black/40 px-3 py-2 transition hover:border-white/30 hover:bg-black/55">
                   <span className="min-w-0 truncate text-sm text-gray-300">
-                    {networkFileName || 'Nog geen netwerkbestand geselecteerd'}
+                    {network?.fileName || 'Nog geen netwerkbestand geselecteerd'}
                   </span>
                   <span className="inline-flex shrink-0 items-center gap-2 rounded-md bg-white px-3 py-2 text-xs font-medium text-black">
                     <FileUp size={15} /> Upload
@@ -40,16 +62,17 @@ export function SimulationConfiguration({ onRun }: SimulationConfigurationProps)
                     className="sr-only"
                     type="file"
                     accept=".json,.csv,application/json,text/csv"
-                    onChange={(event) => setNetworkFileName(event.target.files?.[0]?.name ?? '')}
+                    onChange={(event) => void handleNetworkUpload(event.target.files?.[0])}
                   />
                 </label>
+                {networkStatus && <span className="mt-2 block text-xs text-gray-300">{networkStatus}</span>}
               </Field>
-              <Range label="Basis transmissie per contact (beta)" hint="Kans dat iemand besmet raakt bij 1 contact" min={0} max={1} step={0.01} initialValue={0.28} decimals={2} />
-              <Field label="Incubatietijd" hint="Tijd voordat iemand besmettelijk wordt in dagen"><input type="number" defaultValue={3} /></Field>
-              <Field label="Besmettelijke periode" hint="Hoe lang iemand anderen kan besmetten in dagen"><input type="number" defaultValue={6} /></Field>
+              <Range label="Basis transmissie per contact (beta)" hint="Kans dat iemand besmet raakt bij 1 contact" min={0} max={1} step={0.01} initialValue={config.beta} decimals={2} onValueChange={(beta) => updateConfig({ beta })} />
+              <Field label="Incubatietijd" hint="Tijd voordat iemand besmettelijk wordt in dagen"><input type="number" value={config.incubationDays} onChange={(event) => updateConfig({ incubationDays: Number(event.target.value) })} /></Field>
+              <Field label="Besmettelijke periode" hint="Hoe lang iemand anderen kan besmetten in dagen"><input type="number" value={config.infectiousDays} onChange={(event) => updateConfig({ infectiousDays: Number(event.target.value) })} /></Field>
               <Range label="Asymptomatisch percentage" hint="Deel dat ziek is maar niet merkbaar" min={0} max={100} step={1} initialValue={32} suffix="%" />
               <Field label="Ziekte-ernst" hint="Beinvloedt gedrag: mate waarin mensen thuisblijven"><select><option>Matig</option><option>Laag</option><option>Hoog</option></select></Field>
-              <Range label="Herstelkans per dag" min={0} max={1} step={0.01} initialValue={0.18} decimals={2} />
+              <Range label="Herstelkans per dag" min={0} max={1} step={0.01} initialValue={config.recoveryChance} decimals={2} onValueChange={(recoveryChance) => updateConfig({ recoveryChance })} />
               <div className="rounded-lg border border-white/10 bg-black/25 p-4">
                 <label className="mb-3 flex items-center justify-between text-sm font-medium">
                   Immuniteit na infectie

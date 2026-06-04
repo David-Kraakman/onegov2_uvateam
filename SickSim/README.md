@@ -37,6 +37,7 @@ npm run build
 - `src/components/NetworkCanvas.tsx`: mock-netwerkcanvas.
 - `src/components/SeirChart.tsx`: mock-SEIR grafiek.
 - `src/constants/appConstants.ts`: URLs, navigatiepagina's en datafactor-labels.
+- `src/utils/generateNetwork.ts`: functie om een synthetisch Utrecht-netwerk te genereren.
 - `src/styles.css`: globale styling, liquid-glass effect, scrollbar, buttons en input-styling.
 - `src/data/utrechtData.ts`: plek om Utrecht-data, CBS-tabellen, buurten, RWZI-data of netwerkmetadata in te plakken.
 - `index.html`: Google Font import en root-element.
@@ -84,10 +85,37 @@ Daarna geef je die functie door:
 
 ## Netwerkbestand
 
-Het uploadveld voor het netwerk staat ook in `SimulationConfiguration`. Het accepteert JSON en CSV:
+Het uploadveld voor het netwerk staat in `src/pages/SimulationConfiguration.tsx`. Het accepteert JSON en CSV:
 
 ```tsx
 accept=".json,.csv,application/json,text/csv"
 ```
 
-Momenteel wordt alleen de bestandsnaam opgeslagen. Als je de inhoud wilt gebruiken, moet je in de `onChange` handler het bestand uitlezen met `file.text()` en daarna JSON of CSV parsen.
+Na upload wordt het bestand geparsed in `src/utils/networkParser.ts`. De netwerkdata wordt opgeslagen in `src/App.tsx` en daarna doorgegeven aan:
+
+- `src/pages/NetworkGeneration.tsx`: toont echte knopen, verbindingen en statistieken.
+- `src/pages/SimulationRun.tsx`: berekent een eenvoudige SEIR-curve op basis van het netwerk en de ingestelde parameters.
+
+JSON kan bijvoorbeeld zo:
+
+```json
+{
+  "nodes": [
+    { "id": "A", "label": "Buurt A" },
+    { "id": "B", "label": "Buurt B" }
+  ],
+  "edges": [
+    { "source": "A", "target": "B", "weight": 1 }
+  ]
+}
+```
+
+CSV kan bijvoorbeeld zo:
+
+```csv
+source,target,weight
+A,B,1
+B,C,0.7
+```
+
+De parser herkent ook kolommen zoals `from,to`.

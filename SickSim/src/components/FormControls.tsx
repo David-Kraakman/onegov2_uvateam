@@ -33,11 +33,16 @@ type RangeProps = {
   initialValue: number;
   suffix?: string;
   decimals?: number;
+  onValueChange?: (value: number) => void;
 };
 
-export function Range({ label, hint, min, max, step, initialValue, suffix = '', decimals }: RangeProps) {
+export function Range({ label, hint, min, max, step, initialValue, suffix = '', decimals, onValueChange }: RangeProps) {
   const [value, setValue] = React.useState(initialValue);
   const displayValue = decimals === undefined ? String(value) : value.toFixed(decimals);
+  const updateValue = (nextValue: number) => {
+    setValue(nextValue);
+    onValueChange?.(nextValue);
+  };
 
   return (
     <Field label={label} hint={hint}>
@@ -47,7 +52,7 @@ export function Range({ label, hint, min, max, step, initialValue, suffix = '', 
           <span className="rounded bg-white px-2 py-1 font-medium text-black">{displayValue}{suffix}</span>
           <span>{max}{suffix}</span>
         </div>
-        <input type="range" min={min} max={max} step={step} value={value} onChange={(event) => setValue(Number(event.target.value))} />
+        <input type="range" min={min} max={max} step={step} value={value} onChange={(event) => updateValue(Number(event.target.value))} />
       </div>
     </Field>
   );

@@ -1,11 +1,19 @@
-export function SeirChart() {
-  const paths = [
-    'M20 250 C90 230, 120 170, 180 145 S290 100, 380 115 S480 170, 560 160',
-    'M20 280 C100 275, 135 220, 210 200 S320 140, 410 175 S500 245, 560 235',
-    'M20 310 C90 308, 170 285, 240 240 S350 210, 430 250 S510 300, 560 292',
-    'M20 330 C130 330, 200 325, 300 290 S450 250, 560 205',
-  ];
+import type { SeirPoint } from '../types';
+
+export function SeirChart({ points }: { points: SeirPoint[] }) {
   const labels = ['Vatbaar', 'Besmet', 'Infectieus', 'Hersteld'];
+  const maxValue = Math.max(1, ...points.flatMap((point) => [point.susceptible, point.exposed, point.infectious, point.recovered]));
+  const buildPath = (key: keyof Omit<SeirPoint, 'day'>) => points.map((point, index) => {
+    const x = 20 + (index / Math.max(points.length - 1, 1)) * 540;
+    const y = 310 - (point[key] / maxValue) * 250;
+    return `${index === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`;
+  }).join(' ');
+  const paths = [
+    buildPath('susceptible'),
+    buildPath('exposed'),
+    buildPath('infectious'),
+    buildPath('recovered'),
+  ];
 
   return (
     <svg viewBox="0 0 580 360" className="h-[360px] w-full rounded-lg border border-white/10 bg-black/35">

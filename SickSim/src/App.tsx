@@ -5,11 +5,18 @@ import { NetworkGeneration } from './pages/NetworkGeneration';
 import { PipelineOverview } from './pages/PipelineOverview';
 import { SimulationConfiguration } from './pages/SimulationConfiguration';
 import { SimulationRun } from './pages/SimulationRun';
-import type { Page } from './types';
+import type { NetworkData, Page, SimulationConfig } from './types';
 
 export function App() {
   const [activePage, setActivePage] = React.useState<Page>('Simulatie');
   const [loaded, setLoaded] = React.useState(false);
+  const [network, setNetwork] = React.useState<NetworkData | null>(null);
+  const [simulationConfig, setSimulationConfig] = React.useState<SimulationConfig>({
+    beta: 0.28,
+    incubationDays: 3,
+    infectiousDays: 6,
+    recoveryChance: 0.18,
+  });
 
   React.useEffect(() => {
     const timer = window.setTimeout(() => setLoaded(true), 120);
@@ -28,9 +35,17 @@ export function App() {
         <Navbar activePage={activePage} onPageChange={goToPage} />
         <section className={`flex min-h-0 flex-1 transition-all duration-500 ${loaded ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'}`}>
           {activePage === 'Pipeline overzicht' && <PipelineOverview />}
-          {activePage === 'Netwerk genereren' && <NetworkGeneration />}
-          {activePage === 'Simulatie' && <SimulationConfiguration onRun={() => goToPage('Simulatie run')} />}
-          {activePage === 'Simulatie run' && <SimulationRun />}
+          {activePage === 'Netwerk genereren' && <NetworkGeneration network={network} onNetworkGenerated={setNetwork} />}
+          {activePage === 'Simulatie' && (
+            <SimulationConfiguration
+              config={simulationConfig}
+              network={network}
+              onConfigChange={setSimulationConfig}
+              onNetworkLoaded={setNetwork}
+              onRun={() => goToPage('Simulatie run')}
+            />
+          )}
+          {activePage === 'Simulatie run' && <SimulationRun config={simulationConfig} network={network} />}
         </section>
       </div>
     </main>
