@@ -2,23 +2,26 @@ import React from 'react';
 import { Activity, ArrowLeft, Pause, Play, RotateCcw } from 'lucide-react';
 import { SeirChart } from '../components/SeirChart';
 import type { DataFactor, NetworkData, SimulationConfig } from '../types';
-import { getNetworkStats, runNetworkSeir } from '../utils/networkStats';
+import { calculateFactorMultiplier, getNetworkStats, runNetworkSeir } from '../utils/networkStats';
 
-type SeriesKey = 'susceptible' | 'exposed' | 'infectious' | 'recovered';
+type SeriesKey = 'susceptible' | 'exposed' | 'infectious' | 'recovered' | 'deaths';
 
 export function SimulationRun({ network, config, dataFactors, onBack }: { network: NetworkData | null; config: SimulationConfig; dataFactors: DataFactor[]; onBack: () => void }) {
   const [selectedSeries, setSelectedSeries] = React.useState<SeriesKey>('infectious');
   const points = runNetworkSeir(network, config, dataFactors);
   const stats = getNetworkStats(network);
+  const factorMultiplier = calculateFactorMultiplier(network, dataFactors);
+  const hasProfiles = Boolean(network && network.nodes.some((node) => node.profile));
   const selectedSeriesInfo = {
     susceptible: { label: 'Vatbaar', description: 'Sociaal gezien nog vatbare mensen.' },
     exposed: { label: 'Besmet', description: 'Besmet, maar nog niet zelf besmettelijk.' },
     infectious: { label: 'Infectieus', description: 'Actief besmettelijke personen die anderen kunnen besmetten.' },
     recovered: { label: 'Hersteld', description: 'Hersteld en niet langer vatbaar voor nieuwe besmetting.' },
+    deaths: { label: 'Doden', description: 'Overleden personen als gevolg van de infectie.' },
   } as const;
   const selectedInfo = selectedSeriesInfo[selectedSeries];
   const population = points[0]
-    ? points[0].susceptible + points[0].exposed + points[0].infectious + points[0].recovered
+    ? points[0].susceptible + points[0].exposed + points[0].infectious + points[0].recovered + points[0].deaths
     : 0;
 
   return (
@@ -84,7 +87,15 @@ export function SimulationRun({ network, config, dataFactors, onBack }: { networ
                   <div className="mt-2 text-base font-semibold text-white">Beta: {config.beta.toFixed(2)}</div>
                   <div className="mt-1 text-sm text-gray-400">Incubatie: {config.incubationDays} dagen</div>
                   <div className="text-sm text-gray-400">Besmettelijk: {config.infectiousDays} dagen</div>
-                  <div className="text-sm text-gray-400">Herstelkans: {config.recoveryChance}%</div>
+                  <div className="text-sm text-gray-400">Herstelkans: {(config.recoveryChance * 100).toFixed(0)}%</div>
+                  <div className="text-sm text-gray-400">Asymptomatisch: {config.asymptomaticPercentage}%</div>
+                  <div className="text-sm text-gray-400">Lethaliteit: {config.lethalityChance}%</div>
+                  <div className="text-sm text-gray-400">Immuniteit kans: {config.immunityChance}%</div>
+                </div>
+                <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
+                  <div className="text-xs uppercase tracking-[0.24em] text-gray-500">Factor effect</div>
+                  <div className="mt-2 text-xl font-semibold text-white">{factorMultiplier.toFixed(2)}×</div>
+                  <div className="text-sm text-gray-400">{hasProfiles ? 'Profielen gebruikt voor datafactoren' : 'Geen profielen beschikbaar: generieke gemiddelden gebruikt'}</div>
                 </div>
                 <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
                   <div className="text-xs uppercase tracking-[0.24em] text-gray-500">Populatie</div>

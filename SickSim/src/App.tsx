@@ -17,9 +17,17 @@ export function App() {
     incubationDays: 3,
     infectiousDays: 6,
     recoveryChance: 0.18,
+    asymptomaticPercentage: 32,
+    immunityChance: 100,
+    lethalityChance: 0,
   });
   const [dataFactors, setDataFactors] = React.useState<DataFactor[]>(
-    factorLabels.map((label, index) => ({ label, enabled: index < 10, weight: index % 4 === 0 ? 1.4 : 1 })),
+    factorLabels.map((label, index) => ({
+      label,
+      enabled: index < 10,
+      minFactor: 0.8,
+      maxFactor: 1.5,
+    })),
   );
 
   React.useEffect(() => {

@@ -6,6 +6,7 @@ const series = [
   { key: 'exposed' as const, label: 'Besmet', color: '#facc15' },
   { key: 'infectious' as const, label: 'Infectieus', color: '#fb7185' },
   { key: 'recovered' as const, label: 'Hersteld', color: '#34d399' },
+  { key: 'deaths' as const, label: 'Doden', color: '#a855f7' },
 ];
 
 const chartWidth = 540;
@@ -26,7 +27,7 @@ export function SeirChart({ points, selectedSeries, onSeriesChange }: SeirChartP
   const [hoverIndex, setHoverIndex] = React.useState<number | null>(null);
   const [hoverX, setHoverX] = React.useState<number | null>(null);
   const totalPopulation = points[0]
-    ? points[0].susceptible + points[0].exposed + points[0].infectious + points[0].recovered
+    ? points[0].susceptible + points[0].exposed + points[0].infectious + points[0].recovered + points[0].deaths
     : 1;
 
   const getPercent = (value: number) => (totalPopulation === 0 ? 0 : (value / totalPopulation) * 100);
@@ -178,7 +179,13 @@ export function SeirChart({ points, selectedSeries, onSeriesChange }: SeirChartP
         <div>
           <div className="mb-1 text-xs uppercase tracking-[0.24em] text-slate-500">Geselecteerde lijn</div>
           <div className="text-base font-semibold text-white">{activeSeries.label}</div>
-          <div className="text-sm text-slate-400">{activeSeries.key === 'susceptible' ? 'Sociaal gezien nog vatbare groep.' : activeSeries.key === 'exposed' ? 'Besmet, maar nog niet besmettelijk.' : activeSeries.key === 'infectious' ? 'Actief besmettelijke personen.' : 'Hersteld en niet meer vatbaar.'}</div>
+          <div className="text-sm text-slate-400">
+            {activeSeries.key === 'susceptible' && 'Sociaal gezien nog vatbare groep.'}
+            {activeSeries.key === 'exposed' && 'Besmet, maar nog niet besmettelijk.'}
+            {activeSeries.key === 'infectious' && 'Actief besmettelijke personen.'}
+            {activeSeries.key === 'recovered' && 'Hersteld en niet meer vatbaar.'}
+            {activeSeries.key === 'deaths' && 'Overleden personen als gevolg van de infectie.'}
+          </div>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
           <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3">

@@ -1,4 +1,4 @@
-import type { NetworkData, NetworkEdge, NetworkNode } from '../types';
+import type { AgentProfile, NetworkData, NetworkEdge, NetworkNode } from '../types';
 
 type RawRecord = Record<string, unknown>;
 
@@ -57,12 +57,18 @@ function recordsToNodes(records: RawRecord[]): NetworkNode[] {
   return records
     .map((record, index) => {
       const id = stringValue(record.id ?? record.name ?? record.label ?? index);
-      return {
+      const node: NetworkNode = {
         id,
         label: stringValue(record.label ?? record.name ?? id),
-        x: numberValue(record.x),
-        y: numberValue(record.y),
       };
+
+      const x = numberValue(record.x);
+      const y = numberValue(record.y);
+      if (x !== undefined) node.x = x;
+      if (y !== undefined) node.y = y;
+      if (isRecord(record.profile)) node.profile = record.profile as AgentProfile;
+
+      return node;
     })
     .filter((node) => node.id);
 }

@@ -17,7 +17,6 @@ type SimulationConfigurationProps = {
 };
 
 export function SimulationConfiguration({ config, network, dataFactors, onConfigChange, onDataFactorsChange, onNetworkLoaded, onRun }: SimulationConfigurationProps) {
-  const [immune, setImmune] = React.useState(true);
   const [networkStatus, setNetworkStatus] = React.useState('');
 
   const updateConfig = (patch: Partial<SimulationConfig>) => {
@@ -38,7 +37,17 @@ export function SimulationConfiguration({ config, network, dataFactors, onConfig
   };
 
   const updateFactor = (index: number, patch: Partial<DataFactor>) => {
-    onDataFactorsChange(dataFactors.map((factor, factorIndex) => factorIndex === index ? { ...factor, ...patch } : factor));
+    onDataFactorsChange(dataFactors.map((factor, factorIndex) => {
+      if (factorIndex !== index) {
+        return factor;
+      }
+
+      const updatedFactor = { ...factor, ...patch };
+      const minFactor = Math.max(0, Math.min(updatedFactor.minFactor, updatedFactor.maxFactor));
+      const maxFactor = Math.max(minFactor, updatedFactor.maxFactor);
+
+      return { ...updatedFactor, minFactor, maxFactor };
+    }));
   };
 
   return (
@@ -68,30 +77,61 @@ export function SimulationConfiguration({ config, network, dataFactors, onConfig
               </Field>
               <Range label="Basis transmissie per contact (beta)" hint="Kans dat iemand besmet raakt bij 1 contact" min={0} max={1} step={0.01} initialValue={config.beta} decimals={2} onValueChange={(beta) => updateConfig({ beta })} />
               <Field label="Incubatietijd" hint="Tijd voordat iemand besmettelijk wordt in dagen"><input type="number" value={config.incubationDays} onChange={(event) => updateConfig({ incubationDays: Number(event.target.value) })} /></Field>
-              <Field label="Besmettelijke periode" hint="Hoe lang iemand anderen kan besmetten in dagen"><input type="number" value={config.infectiousDays} onChange={(event) => updateConfig({ infectiousDays: Number(event.target.value) })} /></Field>
-              <Range label="Asymptomatisch percentage" hint="Deel dat ziek is maar niet merkbaar" min={0} max={100} step={1} initialValue={32} suffix="%" />
-              <Field label="Ziekte-ernst" hint="Beinvloedt gedrag: mate waarin mensen thuisblijven"><select><option>Matig</option><option>Laag</option><option>Hoog</option></select></Field>
-              <Range label="Herstelkans per dag" min={0} max={1} step={0.01} initialValue={config.recoveryChance} decimals={2} onValueChange={(recoveryChance) => updateConfig({ recoveryChance })} />
-              <div className="rounded-lg border border-white/10 bg-black/25 p-4">
-                <label className="mb-3 flex items-center justify-between text-sm font-medium">
-                  Immuniteit na infectie
-                  <span className="flex items-center gap-2 text-xs text-gray-300">
-                    {immune ? 'Ja' : 'Nee'}
-                    <input className="h-5 w-5 accent-white" type="checkbox" checked={immune} onChange={(event) => setImmune(event.target.checked)} />
-                  </span>
-                </label>
-                {immune && <input type="number" defaultValue={120} aria-label="Duur immuniteit in dagen" />}
-              </div>
+              <Field label="Besmettelijke periode" hint="Gemiddeld aantal dagen dat iemand anderen kan besmetten"><input type="number" value={config.infectiousDays} onChange={(event) => updateConfig({ infectiousDays: Number(event.target.value) })} /></Field>
+              <Range
+                label="Asymptomatisch percentage"
+                hint="Deel dat ziek is maar niet merkbaar; verhoogt verborgen verspreiding"
+                min={0}
+                max={100}
+                step={1}
+                initialValue={config.asymptomaticPercentage}
+                suffix="%"
+                onValueChange={(asymptomaticPercentage) => updateConfig({ asymptomaticPercentage })}
+              />
+              <Range
+                label="Herstelkans per dag"
+                hint="Dagelijkse kans op herstel; wordt gecombineerd met de infectieuze duur"
+                min={0}
+                max={1}
+                step={0.01}
+                initialValue={config.recoveryChance}
+                decimals={2}
+                onValueChange={(recoveryChance) => updateConfig({ recoveryChance })}
+              />
+              <Range
+                label="Letaliteit"
+                hint="Kans dat een infectie fataal wordt"
+                min={0}
+                max={100}
+                step={1}
+                initialValue={config.lethalityChance}
+                suffix="%"
+                onValueChange={(lethalityChance) => updateConfig({ lethalityChance })}
+              />
+              <Range
+                label="Immuniteit kans na infectie"
+                hint="Kans dat iemand immuun blijft na herstel"
+                min={0}
+                max={100}
+                step={1}
+                initialValue={config.immunityChance}
+                suffix="%"
+                onValueChange={(immunityChance) => updateConfig({ immunityChance })}
+              />
             </div>
 
             <SectionTitle icon={<Database size={18} />} title="Datafactoren" />
+            <p className="mb-3 text-sm text-gray-300">
+              De minimale factor bepaalt de ondergrens van het transmissie-effect, de maximale factor bepaalt de bovengrens. Verander beide om de range van elk datafactor-effect in te stellen.
+            </p>
             <div className="grid gap-3">
               {dataFactors.map((factor, index) => (
                 <DataFactorRow
                   factor={factor}
                   key={factor.label}
                   onEnabledChange={(enabled) => updateFactor(index, { enabled })}
-                  onWeightChange={(weight) => updateFactor(index, { weight })}
+                  onMinFactorChange={(minFactor) => updateFactor(index, { minFactor })}
+                  onMaxFactorChange={(maxFactor) => updateFactor(index, { maxFactor })}
                 />
               ))}
             </div>

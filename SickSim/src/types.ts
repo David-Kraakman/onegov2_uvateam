@@ -3,7 +3,8 @@ export type Page = 'Pipeline overzicht' | 'Netwerk genereren' | 'Simulatie' | 'S
 export type DataFactor = {
   label: string;
   enabled: boolean;
-  weight: number;
+  minFactor: number;
+  maxFactor: number;
 };
 
 export type AgentProfile = {
@@ -81,6 +82,9 @@ export type SimulationConfig = {
   incubationDays: number;
   infectiousDays: number;
   recoveryChance: number;
+  asymptomaticPercentage: number;
+  immunityChance: number;
+  lethalityChance: number;
 };
 
 export type SeirPoint = {
@@ -89,4 +93,5 @@ export type SeirPoint = {
   exposed: number;
   infectious: number;
   recovered: number;
+  deaths: number;
 };

@@ -31,27 +31,44 @@ export function runNetworkSeir(network: NetworkData | null, config: SimulationCo
   const population = Math.max(stats.nodeCount, 1);
   const averageContacts = Math.max(stats.meanDegree, 1);
   const factorMultiplier = calculateFactorMultiplier(network, dataFactors);
-  const transmissionRate = Math.min(0.95, config.beta * averageContacts * 0.12 * factorMultiplier);
+  const asymptomaticFraction = Math.max(0, Math.min(100, config.asymptomaticPercentage)) / 100;
+  const asymptomaticMultiplier = 1 + asymptomaticFraction * 0.5;
+  const transmissionRate = Math.min(0.95, config.beta * averageContacts * 0.12 * factorMultiplier * asymptomaticMultiplier);
   const incubationRate = 1 / Math.max(config.incubationDays, 1);
-  const recoveryRate = Math.max(config.recoveryChance, 1 / Math.max(config.infectiousDays, 1));
+  const infectiousDuration = Math.max(config.infectiousDays, 1);
+  const recoveryRateFromDuration = 1 / infectiousDuration;
+  const recoveryRate = Math.max(0, Math.min(1, (config.recoveryChance + recoveryRateFromDuration) / 2));
+  const immunityFraction = Math.max(0, Math.min(100, config.immunityChance)) / 100;
+  const lethalityFraction = Math.max(0, Math.min(100, config.lethalityChance)) / 100;
 
   let susceptible = Math.max(population - 1, 0);
   let exposed = 0;
   let infectious = 1;
   let recovered = 0;
+  let deaths = 0;
   const points: SeirPoint[] = [];
-  const maxDays = 120;
+  const maxDays = 360;
 
   let exposedRemainder = 0;
   let infectiousRemainder = 0;
-  let recoveredRemainder = 0;
+  let recoveryRemainder = 0;
+  let immuneRemainder = 0;
+  let deathRemainder = 0;
+  let day = 0;
 
-  let terminatedEarly = false;
+  while (day < maxDays) {
+    points.push({
+      day,
+      susceptible,
+      exposed,
+      infectious,
+      recovered,
+      deaths,
+    });
 
-  for (let day = 0; day < maxDays; day += 1) {
     const rawNewExposed = transmissionRate * infectious * susceptible / population + exposedRemainder;
     const rawNewInfectious = exposed * incubationRate + infectiousRemainder;
-    const rawNewRecovered = infectious * recoveryRate + recoveredRemainder;
+    const rawNewRecovered = infectious * recoveryRate + recoveryRemainder;
 
     const newExposed = Math.min(susceptible, Math.max(0, Math.floor(rawNewExposed)));
     const newInfectious = Math.min(exposed, Math.max(0, Math.floor(rawNewInfectious)));
@@ -59,22 +76,25 @@ export function runNetworkSeir(network: NetworkData | null, config: SimulationCo
 
     exposedRemainder = rawNewExposed - newExposed;
     infectiousRemainder = rawNewInfectious - newInfectious;
-    recoveredRemainder = rawNewRecovered - newRecovered;
+    recoveryRemainder = rawNewRecovered - newRecovered;
 
-    points.push({
-      day,
-      susceptible,
-      exposed,
-      infectious,
-      recovered,
-    });
+    const rawDeathCount = newRecovered * lethalityFraction + deathRemainder;
+    const deathCount = Math.max(0, Math.floor(rawDeathCount));
+    const survivors = newRecovered - deathCount;
+    deathRemainder = rawDeathCount - deathCount;
 
-    let nextSusceptible = susceptible - newExposed;
+    const rawImmuneRecoveries = survivors * immunityFraction + immuneRemainder;
+    const immuneRecoveries = Math.max(0, Math.floor(rawImmuneRecoveries));
+    const recoveredToSusceptible = survivors - immuneRecoveries;
+    immuneRemainder = rawImmuneRecoveries - immuneRecoveries;
+
+    let nextSusceptible = susceptible - newExposed + recoveredToSusceptible;
     let nextExposed = exposed + newExposed - newInfectious;
     let nextInfectious = infectious + newInfectious - newRecovered;
-    let nextRecovered = recovered + newRecovered;
+    let nextRecovered = recovered + immuneRecoveries;
+    let nextDeaths = deaths + deathCount;
 
-    const total = nextSusceptible + nextExposed + nextInfectious + nextRecovered;
+    const total = nextSusceptible + nextExposed + nextInfectious + nextRecovered + nextDeaths;
     const diff = population - total;
 
     if (diff !== 0) {
@@ -82,7 +102,12 @@ export function runNetworkSeir(network: NetworkData | null, config: SimulationCo
         nextSusceptible += diff;
       } else {
         let remaining = -diff;
-        const subtractFrom = [() => Math.min(nextRecovered, remaining), () => Math.min(nextInfectious, remaining), () => Math.min(nextExposed, remaining), () => Math.min(nextSusceptible, remaining)];
+        const subtractFrom = [
+          () => Math.min(nextRecovered, remaining),
+          () => Math.min(nextInfectious, remaining),
+          () => Math.min(nextExposed, remaining),
+          () => Math.min(nextSusceptible, remaining),
+        ];
         const update = [
           (value: number) => { nextRecovered -= value; remaining -= value; },
           (value: number) => { nextInfectious -= value; remaining -= value; },
@@ -97,33 +122,37 @@ export function runNetworkSeir(network: NetworkData | null, config: SimulationCo
       }
     }
 
-    susceptible = Math.max(0, Math.round(nextSusceptible));
-    exposed = Math.max(0, Math.round(nextExposed));
-    infectious = Math.max(0, Math.round(nextInfectious));
-    recovered = Math.max(0, Math.round(nextRecovered));
+    nextSusceptible = Math.max(0, Math.round(nextSusceptible));
+    nextExposed = Math.max(0, Math.round(nextExposed));
+    nextInfectious = Math.max(0, Math.round(nextInfectious));
+    nextRecovered = Math.max(0, Math.round(nextRecovered));
+    nextDeaths = Math.max(0, Math.round(nextDeaths));
 
-    if (day >= 20 && exposed + infectious < 1) {
-      terminatedEarly = true;
+    if (nextExposed + nextInfectious === 0) {
+      points.push({
+        day: day + 1,
+        susceptible: nextSusceptible,
+        exposed: nextExposed,
+        infectious: nextInfectious,
+        recovered: nextRecovered,
+        deaths: nextDeaths,
+      });
       break;
     }
-  }
 
-  if (terminatedEarly) {
-    const lastPoint = points[points.length - 1];
-    points.push({
-      day: lastPoint.day + 1,
-      susceptible,
-      exposed,
-      infectious,
-      recovered,
-    });
+    susceptible = nextSusceptible;
+    exposed = nextExposed;
+    infectious = nextInfectious;
+    recovered = nextRecovered;
+    deaths = nextDeaths;
+    day += 1;
   }
 
   return points;
 }
 
-function calculateFactorMultiplier(network: NetworkData | null, dataFactors: DataFactor[]): number {
-  const activeFactors = dataFactors.filter((factor) => factor.enabled && factor.weight > 0);
+export function calculateFactorMultiplier(network: NetworkData | null, dataFactors: DataFactor[]): number {
+  const activeFactors = dataFactors.filter((factor) => factor.enabled);
   if (!network || activeFactors.length === 0) {
     return 1;
   }
@@ -133,79 +162,89 @@ function calculateFactorMultiplier(network: NetworkData | null, dataFactors: Dat
     .filter((profile): profile is NonNullable<NetworkData['nodes'][number]['profile']> => Boolean(profile));
 
   if (profiles.length === 0) {
-    return 1;
+    // Als er geen profielen beschikbaar zijn, gebruiken we generieke gemiddelden
+    // zodat de factorinstellingen toch direct effect hebben op de simulatie.
   }
 
   const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
   const normalize = (value: number, min: number, max: number) => (min === max ? 0 : clamp((value - min) / (max - min), 0, 1));
   const average = (values: number[]) => (values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length);
+  const mapFactor = (normalized: number, minFactor: number, maxFactor: number) => minFactor + normalized * (maxFactor - minFactor);
 
-  const uniqueAreaCount = new Set(profiles.map((profile) => `${profile.buurtcode}-${profile.wijkcode}`)).size;
-  const averagePopulation = average(profiles.map((profile) => profile.bevolkingsomvang));
-  const averageHouseholdSize = average(profiles.map((profile) => profile.huishoudgrootte));
-  const averageNonWestern = average(profiles.map((profile) => profile.aandeelNietWesterseAchtergrond));
-  const averageApartmentShare = average(profiles.map((profile) => (profile.woningtype === 'appartement' ? 1 : 0)));
-  const averageOccupancy = average(profiles.map((profile) => profile.bezettingsgraadWoning));
-  const averageIncome = average(profiles.map((profile) => profile.gemiddeldBestedbaarInkomen));
-  const averageUrbanity = average(profiles.map((profile) => profile.stedelijkheidsgraad));
-  const averageLowEducation = average(profiles.map((profile) => profile.opleidingsniveau.laag));
-  const averageRwziCapacity = average(profiles.map((profile) => profile.rwzi.capaciteit));
-  const averageCatchment = average(profiles.map((profile) => profile.catchment.aansluitingen));
-  const averageLandWoon = average(profiles.map((profile) => profile.landgebruik.woongebied));
-  const averageLandIndustry = average(profiles.map((profile) => profile.landgebruik.industrie));
-  const averageLandAgrarisch = average(profiles.map((profile) => profile.landgebruik.agrarisch));
-  const averagePortProximity = average(profiles.map((profile) => profile.nabijheidHavenKm));
-  const averageYoungOld = average(profiles.map((profile) => profile.leeftijdsverdeling['0-14'] + profile.leeftijdsverdeling['65+']));
+  const hasProfiles = profiles.length > 0;
+  const uniqueAreaCount = hasProfiles ? new Set(profiles.map((profile) => `${profile.buurtcode}-${profile.wijkcode}`)).size : 8;
+  const averagePopulation = hasProfiles ? average(profiles.map((profile) => profile.bevolkingsomvang)) : 6000;
+  const averageHouseholdSize = hasProfiles ? average(profiles.map((profile) => profile.huishoudgrootte)) : 2.5;
+  const averageNonWestern = hasProfiles ? average(profiles.map((profile) => profile.aandeelNietWesterseAchtergrond)) : 20;
+  const averageApartmentShare = hasProfiles ? average(profiles.map((profile) => (profile.woningtype === 'appartement' ? 1 : 0))) : 0.5;
+  const averageOccupancy = hasProfiles ? average(profiles.map((profile) => profile.bezettingsgraadWoning)) : 1.7;
+  const averageIncome = hasProfiles ? average(profiles.map((profile) => profile.gemiddeldBestedbaarInkomen)) : 35000;
+  const averageUrbanity = hasProfiles ? average(profiles.map((profile) => profile.stedelijkheidsgraad)) : 60;
+  const averageLowEducation = hasProfiles ? average(profiles.map((profile) => profile.opleidingsniveau.laag)) : 0.3;
+  const averageRwziCapacity = hasProfiles ? average(profiles.map((profile) => profile.rwzi.capaciteit)) : 5000;
+  const averageCatchment = hasProfiles ? average(profiles.map((profile) => profile.catchment.aansluitingen)) : 14;
+  const averageLandWoon = hasProfiles ? average(profiles.map((profile) => profile.landgebruik.woongebied)) : 40;
+  const averageLandIndustry = hasProfiles ? average(profiles.map((profile) => profile.landgebruik.industrie)) : 15;
+  const averageLandAgrarisch = hasProfiles ? average(profiles.map((profile) => profile.landgebruik.agrarisch)) : 23;
+  const averagePortProximity = hasProfiles ? average(profiles.map((profile) => profile.nabijheidHavenKm)) : 30;
+  const averageChildShare = hasProfiles ? average(profiles.map((profile) => profile.leeftijdsverdeling['0-14'])) : 0.18;
+  const averageYoungAdultShare = hasProfiles ? average(profiles.map((profile) => profile.leeftijdsverdeling['15-24'] + profile.leeftijdsverdeling['25-44'])) : 0.4;
+  const averageSeniorShare = hasProfiles ? average(profiles.map((profile) => profile.leeftijdsverdeling['65+'])) : 0.18;
 
   const factorEffects = activeFactors.map((factor) => {
-    const weight = Math.max(0, factor.weight);
+    const mapRange = (normalized: number) => mapFactor(normalized, factor.minFactor, factor.maxFactor);
+
     if (factor.label.includes('Buurtcode / wijkcode')) {
-      return 1 + 0.05 * weight * normalize(uniqueAreaCount, 2, 15);
+      return mapRange(normalize(uniqueAreaCount, 2, 15));
     }
     if (factor.label.includes('Bevolkingsomvang')) {
-      return 1 + 0.05 * weight * normalize(averagePopulation, 1000, 12000);
+      return mapRange(normalize(averagePopulation, 1000, 12000));
     }
     if (factor.label.includes('Leeftijdsverdeling')) {
-      return 1 + 0.04 * weight * normalize(averageYoungOld, 15, 45);
+      const seniorRisk = mapFactor(normalize(averageSeniorShare, 5, 30), 1, 1.5);
+      const childRisk = mapFactor(normalize(averageChildShare, 5, 30), 1, 1.2);
+      const youngAdultRisk = mapFactor(normalize(averageYoungAdultShare, 20, 70), 0.5, 1);
+      const ageRisk = clamp(1 + (seniorRisk - 1) + (childRisk - 1) - (1 - youngAdultRisk), 0.5, 1.5);
+      return mapRange(normalize(ageRisk, 0.5, 1.5));
     }
     if (factor.label.includes('Huishoudgrootte')) {
-      return 1 + 0.05 * weight * normalize(averageHouseholdSize, 1.2, 3.1);
+      return mapRange(normalize(averageHouseholdSize, 1.2, 3.1));
     }
     if (factor.label.includes('aandeel niet-westerse')) {
-      return 1 + 0.04 * weight * normalize(averageNonWestern, 5, 40);
+      return mapRange(normalize(averageNonWestern, 5, 40));
     }
     if (factor.label.includes('Woningtype')) {
-      return 1 + 0.05 * weight * averageApartmentShare;
+      return mapRange(averageApartmentShare);
     }
     if (factor.label.includes('Bezettingsgraad')) {
-      return 1 + 0.05 * weight * normalize(averageOccupancy, 1.1, 2.4);
+      return mapRange(normalize(averageOccupancy, 1.1, 2.4));
     }
     if (factor.label.includes('Inkomen')) {
-      return 1 + 0.04 * weight * (1 - normalize(averageIncome, 22000, 72000));
+      return mapRange(1 - normalize(averageIncome, 22000, 72000));
     }
     if (factor.label.includes('Stedelijkheidsgraad')) {
-      return 1 + 0.06 * weight * normalize(averageUrbanity, 20, 100);
+      return mapRange(normalize(averageUrbanity, 20, 100));
     }
     if (factor.label.includes('Opleidingsniveau')) {
-      return 1 + 0.05 * weight * normalize(averageLowEducation, 0.18, 0.42);
+      return mapRange(normalize(averageLowEducation, 0.18, 0.42));
     }
     if (factor.label.includes('RWZI')) {
-      return 1 + 0.03 * weight * normalize(averageRwziCapacity, 1500, 8500);
+      return mapRange(normalize(averageRwziCapacity, 1500, 8500));
     }
     if (factor.label.includes('Catchment')) {
-      return 1 + 0.03 * weight * normalize(averageCatchment, 4, 24);
+      return mapRange(normalize(averageCatchment, 4, 24));
     }
     if (factor.label.includes('woongebied')) {
-      return 1 + 0.03 * weight * normalize(averageLandWoon, 20, 65);
+      return mapRange(normalize(averageLandWoon, 20, 65));
     }
     if (factor.label.includes('industrie')) {
-      return 1 + 0.03 * weight * normalize(averageLandIndustry, 5, 30);
+      return mapRange(normalize(averageLandIndustry, 5, 30));
     }
     if (factor.label.includes('agrarisch')) {
-      return 1 - 0.02 * weight * normalize(averageLandAgrarisch, 8, 38);
+      return mapRange(normalize(averageLandAgrarisch, 8, 38));
     }
     if (factor.label.includes('haven')) {
-      return 1 + 0.03 * weight * (1 - normalize(averagePortProximity, 8, 95));
+      return mapRange(1 - normalize(averagePortProximity, 8, 95));
     }
     return 1;
   });
