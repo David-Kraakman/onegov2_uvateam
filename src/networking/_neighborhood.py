@@ -6,10 +6,11 @@ import math
 
 household_size = 2
 
-households_target = 190000
-households_single_target = 100000
-households_together_target = 40000
-households_kids_target = 50000
+households_target = 40000
+households_single_target = 20000
+households_together_target = 10000
+households_kids_target = 10000
+target_size = 2.5
 
 
 @dataclass
@@ -19,6 +20,7 @@ class HouseholdData:
     together: int
     kids: int
     problem_nodes: int
+    size_diff: float
 
     def copy(self):
         return HouseholdData(
@@ -27,6 +29,7 @@ class HouseholdData:
             self.together,
             self.kids,
             self.problem_nodes,
+            self.size_diff,
         )
 
     def set(self, other):
@@ -35,6 +38,7 @@ class HouseholdData:
         self.together = other.together
         self.kids = other.kids
         self.problem_nodes = other.problem_nodes
+        self.size_diff = other.size_diff
 
 
 class HouseholdType(Enum):
@@ -73,6 +77,7 @@ def classify_household(g: nx.Graph, island) -> HouseholdType:
 def remove_household(g: nx.Graph, island, data: HouseholdData):
     data.households -= 1
     household_type = classify_household(g, island)
+    data.size_diff -= abs(target_size - len(island)) ** 2
     # Categorize household
     match household_type:
         case HouseholdType.SINGLE:
@@ -84,11 +89,13 @@ def remove_household(g: nx.Graph, island, data: HouseholdData):
         case HouseholdType.PROBLEM:
             # Problem nodes: doesn't fit any category
             data.problem_nodes -= len(island)
+            data.households += 1
 
 
 def add_household(g: nx.Graph, island, data: HouseholdData):
     data.households += 1
     household_type = classify_household(g, island)
+    data.size_diff += abs(target_size - len(island)) ** 2
     # Categorize household
     match household_type:
         case HouseholdType.SINGLE:
@@ -98,6 +105,7 @@ def add_household(g: nx.Graph, island, data: HouseholdData):
         case HouseholdType.KIDS:
             data.kids += 1
         case HouseholdType.PROBLEM:
+            data.households -= 1
             # Problem nodes: doesn't fit any category
             data.problem_nodes += len(island)
 
@@ -133,7 +141,9 @@ def count_households(g: nx.Graph) -> HouseholdData:
     Returns:
         HouseholdData: Aggregated household statistics and problem nodes
     """
-    data = HouseholdData(households=0, single=0, together=0, kids=0, problem_nodes=0)
+    data = HouseholdData(
+        households=0, single=0, together=0, kids=0, problem_nodes=0, size_diff=0
+    )
 
     for island in iterate_islands(g):
         # Get all nodes in this household island
@@ -154,12 +164,20 @@ def calculate_energy(household_data: HouseholdData) -> float:
     Returns:
         float: Energy value (lower is better)
     """
-    single_diff = abs(household_data.single - households_single_target)
-    together_diff = abs(household_data.together - households_together_target)
-    kids_diff = abs(household_data.kids - households_kids_target)
-    problem_diff = household_data.problem_nodes
+    single_diff = abs(household_data.single - households_single_target) ** 2
+    together_diff = abs(household_data.together - households_together_target) ** 2
+    kids_diff = abs(household_data.kids - households_kids_target) ** 2
+    problem_diff = household_data.problem_nodes**2
+    households_diff = abs(household_data.households - households_target) ** 2
 
-    energy = single_diff + together_diff + kids_diff + problem_diff
+    energy = (
+        single_diff
+        + together_diff
+        + kids_diff
+        + problem_diff
+        + households_diff
+        + household_data.size_diff * 2
+    )
     return energy
 
 
@@ -170,8 +188,8 @@ def metropolis_criterion(
     Metropolis criterion for accepting a neighbor solution.
 
     Args:
-        current_energy: Energy of current solution
-        neighbor_energy: Energy of neighbor solution
+        new_data: Energy of new solution
+        old_data: Energy of old solution
         temperature: Current temperature
 
     Returns:
@@ -179,14 +197,14 @@ def metropolis_criterion(
     """
     old_energy = calculate_energy(old_data)
     new_energy = calculate_energy(new_data)
-    if new_energy < current_energy:
+    if new_energy < old_energy:
         return True
 
     if temperature == 0:
         return False
 
     # Probability of accepting worse solution
-    probability = math.exp(-(new_energy - old_energy) / temperature)
+    probability = math.exp((old_energy - new_energy) / temperature)
     return random.random() < probability
 
 
@@ -197,21 +215,33 @@ def change_edge(g: nx.Graph, data: HouseholdData, temperature: float):
         node1, node2 = random.sample(nodes, 2)
 
     old_data = data.copy()
-    if g.get_edge_data(node1, node2, default=None) is not None:
-        remove_household(g, nx.node_connected_component(g, node1), data)
-        g.remove_edge(node1, node2)
-        add_household(g, nx.node_connected_component(g, node1), data)
-        add_household(g, nx.node_connected_component(g, node2), data)
+    node1_connected = nx.node_connected_component(g, node1)
+    if node2 in node1_connected:
+        remove_household(g, node1_connected, data)
+        for node in node1_connected:
+            if node == node1:
+                continue
+            g.remove_edge(node1, node)
+        add_household(g, {node1}, data)
+        add_household(g, node1_connected - {node1}, data)
         if not metropolis_criterion(data, old_data, temperature):
-            g.add_edge(node1, node2)
+            for node in node1_connected:
+                if node == node1:
+                    continue
+                g.add_edge(node1, node)
             data.set(old_data)
     else:
-        remove_household(g, nx.node_connected_component(g, node1), data)
-        remove_household(g, nx.node_connected_component(g, node2), data)
-        g.add_edge(node1, node2)
-        add_household(g, nx.node_connected_component(g, node1), data)
+        node2_connected = nx.node_connected_component(g, node2)
+        remove_household(g, node1_connected, data)
+        remove_household(g, node2_connected, data)
+        for node_first in node1_connected:
+            for node_second in node2_connected:
+                g.add_edge(node_first, node_second)
+        add_household(g, node1_connected | node2_connected, data)
         if not metropolis_criterion(data, old_data, temperature):
-            g.remove_edge(node1, node2)
+            for node_first in node1_connected:
+                for node_second in node2_connected:
+                    g.remove_edge(node_first, node_second)
             data.set(old_data)
 
 
@@ -228,7 +258,7 @@ def link_neighborhood(g: nx.Graph):
     """
     # Simulated annealing parameters
     initial_temperature = 1000.0
-    cooling_rate = 0.95
+    cooling_rate = 0.99
     min_temperature = 1e-8
     iterations_per_temp = 100
 
@@ -256,6 +286,6 @@ def link_neighborhood(g: nx.Graph):
             f"Iteration {iteration}, T={temperature:.4f}, Energy={current_energy:.2f}"
         )
         print(
-            f"  Current - Single: {data.single}, Together: {data.together}, Kids: {data.kids}, Problem:{data.problem_nodes}"
+            f"  Total: {data.households}, Single: {data.single}, Together: {data.together}, Kids: {data.kids}, Problem:{data.problem_nodes}"
         )
         current_energy = calculate_energy(data)

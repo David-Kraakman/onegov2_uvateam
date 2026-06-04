@@ -40,7 +40,7 @@ def generate_test_network(num_nodes: int = 100, seed: int = None) -> nx.Graph:
 def test_single_node_island():
     """Test classification of single isolated nodes."""
     print("\n=== Test: Single Node Islands ===")
-    g = generate_test_network(num_nodes=1000, seed=42)
+    g = generate_test_network(num_nodes=100000, seed=42)
 
     data = count_households(g)
 
