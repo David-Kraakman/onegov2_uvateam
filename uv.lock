@@ -108,6 +108,12 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/b8/82/acf73d6e8b3877e3b0ace42aad730bd8ac3b7320a70963092cdc6cc85ec9/ipfn-1.4.4.tar.gz", hash = "sha256:bf6b446f9dea53e28481a5cff9461769cba5711542eaebe05e554ac09c832ddd", size = 10909, upload-time = "2021-12-30T22:17:18.544Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/85/d9/98b20dd1b5c66f726fd9c7974b78854c3432ba14d8bc28d388815da50f06/ipfn-1.4.4-py2.py3-none-any.whl", hash = "sha256:a0b5f3c9c5de8c71207cc88f1e51b68135d482a50d7035c58f3e202d33a6b026", size = 7382, upload-time = "2021-12-30T22:17:17.08Z" },
+name = "networkx"
+version = "3.6.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/6a/51/63fe664f3908c97be9d2e4f1158eb633317598cfa6e1fc14af5383f17512/networkx-3.6.1.tar.gz", hash = "sha256:26b7c357accc0c8cde558ad486283728b65b6a95d85ee1cd66bafab4c8168509", size = 2517025, upload-time = "2025-12-08T17:02:39.908Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9e/c9/b2622292ea83fbb4ec318f5b9ab867d0a28ab43c5717bb85b0a5f6b3b0a4/networkx-3.6.1-py3-none-any.whl", hash = "sha256:d47fbf302e7d9cbbb9e2555a0d267983d2aa476bac30e90dfbe5669bd57f3762", size = 2068504, upload-time = "2025-12-08T17:02:38.159Z" },
 ]
 
 [[package]]
@@ -170,6 +176,8 @@ dependencies = [
     { name = "pandas" },
     { name = "pyarrow" },
     { name = "pyyaml" },
+    { name = "networkx" },
+    { name = "pandas" },
 ]
 
 [package.metadata]
@@ -179,6 +187,8 @@ requires-dist = [
     { name = "pandas", specifier = ">=3.0.3" },
     { name = "pyarrow", specifier = ">=24.0.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "networkx", specifier = ">=3.6.1" },
+    { name = "pandas", specifier = ">=3.0.3" },
 ]
 
 [[package]]
