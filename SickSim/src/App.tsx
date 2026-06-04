@@ -5,7 +5,8 @@ import { NetworkGeneration } from './pages/NetworkGeneration';
 import { PipelineOverview } from './pages/PipelineOverview';
 import { SimulationConfiguration } from './pages/SimulationConfiguration';
 import { SimulationRun } from './pages/SimulationRun';
-import type { NetworkData, Page, SimulationConfig } from './types';
+import { factorLabels } from './constants/appConstants';
+import type { DataFactor, NetworkData, Page, SimulationConfig } from './types';
 
 export function App() {
   const [activePage, setActivePage] = React.useState<Page>('Simulatie');
@@ -17,6 +18,9 @@ export function App() {
     infectiousDays: 6,
     recoveryChance: 0.18,
   });
+  const [dataFactors, setDataFactors] = React.useState<DataFactor[]>(
+    factorLabels.map((label, index) => ({ label, enabled: index < 10, weight: index % 4 === 0 ? 1.4 : 1 })),
+  );
 
   React.useEffect(() => {
     const timer = window.setTimeout(() => setLoaded(true), 120);
@@ -50,7 +54,9 @@ export function App() {
             <SimulationConfiguration
               config={simulationConfig}
               network={network}
+              dataFactors={dataFactors}
               onConfigChange={setSimulationConfig}
+              onDataFactorsChange={setDataFactors}
               onNetworkLoaded={setNetwork}
               onRun={() => {
                 setLastSimulationPage('Simulatie run');
@@ -61,6 +67,7 @@ export function App() {
           {activePage === 'Simulatie run' && (
             <SimulationRun
               config={simulationConfig}
+              dataFactors={dataFactors}
               network={network}
               onBack={() => {
                 setLastSimulationPage('Simulatie');

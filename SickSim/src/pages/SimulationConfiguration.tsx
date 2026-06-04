@@ -9,17 +9,16 @@ import { parseNetworkFile } from '../utils/networkParser';
 type SimulationConfigurationProps = {
   config: SimulationConfig;
   network: NetworkData | null;
+  dataFactors: DataFactor[];
   onConfigChange: (config: SimulationConfig) => void;
+  onDataFactorsChange: (dataFactors: DataFactor[]) => void;
   onNetworkLoaded: (network: NetworkData) => void;
   onRun: () => void;
 };
 
-export function SimulationConfiguration({ config, network, onConfigChange, onNetworkLoaded, onRun }: SimulationConfigurationProps) {
+export function SimulationConfiguration({ config, network, dataFactors, onConfigChange, onDataFactorsChange, onNetworkLoaded, onRun }: SimulationConfigurationProps) {
   const [immune, setImmune] = React.useState(true);
   const [networkStatus, setNetworkStatus] = React.useState('');
-  const [dataFactors, setDataFactors] = React.useState<DataFactor[]>(
-    factorLabels.map((label, index) => ({ label, enabled: index < 10, weight: index % 4 === 0 ? 1.4 : 1 })),
-  );
 
   const updateConfig = (patch: Partial<SimulationConfig>) => {
     onConfigChange({ ...config, ...patch });
@@ -39,7 +38,7 @@ export function SimulationConfiguration({ config, network, onConfigChange, onNet
   };
 
   const updateFactor = (index: number, patch: Partial<DataFactor>) => {
-    setDataFactors((current) => current.map((factor, factorIndex) => factorIndex === index ? { ...factor, ...patch } : factor));
+    onDataFactorsChange(dataFactors.map((factor, factorIndex) => factorIndex === index ? { ...factor, ...patch } : factor));
   };
 
   return (

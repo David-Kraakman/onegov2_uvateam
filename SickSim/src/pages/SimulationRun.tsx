@@ -1,14 +1,14 @@
 import React from 'react';
 import { Activity, ArrowLeft, Pause, Play, RotateCcw } from 'lucide-react';
 import { SeirChart } from '../components/SeirChart';
-import type { NetworkData, SimulationConfig } from '../types';
+import type { DataFactor, NetworkData, SimulationConfig } from '../types';
 import { getNetworkStats, runNetworkSeir } from '../utils/networkStats';
 
 type SeriesKey = 'susceptible' | 'exposed' | 'infectious' | 'recovered';
 
-export function SimulationRun({ network, config, onBack }: { network: NetworkData | null; config: SimulationConfig; onBack: () => void }) {
+export function SimulationRun({ network, config, dataFactors, onBack }: { network: NetworkData | null; config: SimulationConfig; dataFactors: DataFactor[]; onBack: () => void }) {
   const [selectedSeries, setSelectedSeries] = React.useState<SeriesKey>('infectious');
-  const points = runNetworkSeir(network, config);
+  const points = runNetworkSeir(network, config, dataFactors);
   const stats = getNetworkStats(network);
   const selectedSeriesInfo = {
     susceptible: { label: 'Vatbaar', description: 'Sociaal gezien nog vatbare mensen.' },
