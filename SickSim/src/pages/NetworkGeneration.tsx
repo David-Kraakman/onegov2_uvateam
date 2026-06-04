@@ -21,7 +21,7 @@ export function NetworkGeneration({ network, onNetworkGenerated }: NetworkGenera
     ['Dichtheid', stats.density.toLocaleString('nl-NL', { maximumFractionDigits: 4 })],
     ['Hoogste graad', stats.largestDegree.toLocaleString('nl-NL')],
   ];
-  const downloadNetwork = () => {
+  const downloadJson = () => {
     if (!network) {
       setGenerationStatus('Genereer of upload eerst een netwerk voordat je downloadt.');
       return;
@@ -32,10 +32,49 @@ export function NetworkGeneration({ network, onNetworkGenerated }: NetworkGenera
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = network.fileName.endsWith('.json') ? network.fileName : `${network.fileName}.json`;
+    
+    let name = network.fileName;
+    if (name.endsWith('.csv')) {
+      name = name.slice(0, -4) + '.json';
+    } else if (!name.endsWith('.json')) {
+      name = `${name}.json`;
+    }
+
+    link.download = name;
     link.click();
     URL.revokeObjectURL(url);
-    setGenerationStatus(`${network.fileName} is gedownload.`);
+    setGenerationStatus(`${name} is gedownload.`);
+  };
+
+  const downloadCsv = () => {
+    if (!network) {
+      setGenerationStatus('Genereer of upload eerst een netwerk voordat je downloadt.');
+      return;
+    }
+
+    const csvRows = ['source,target,weight'];
+    network.edges.forEach((edge) => {
+      const weight = edge.weight !== undefined ? edge.weight : 1;
+      csvRows.push(`${edge.source},${edge.target},${weight}`);
+    });
+
+    const content = csvRows.join('\n');
+    const blob = new Blob([content], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+
+    let name = network.fileName;
+    if (name.endsWith('.json')) {
+      name = name.slice(0, -5) + '.csv';
+    } else if (!name.endsWith('.csv')) {
+      name = `${name}.csv`;
+    }
+
+    link.download = name;
+    link.click();
+    URL.revokeObjectURL(url);
+    setGenerationStatus(`${name} is gedownload.`);
   };
 
   return (
@@ -66,9 +105,14 @@ export function NetworkGeneration({ network, onNetworkGenerated }: NetworkGenera
             Genereer netwerk
           </button>
           {generationStatus && <p className="mt-3 text-xs leading-5 text-gray-300">{generationStatus}</p>}
-          <button className="liquid-glass mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-medium transition hover:text-gray-300" onClick={downloadNetwork}>
-            <Download size={16} /> Download netwerk (JSON/CSV)
-          </button>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button className="liquid-glass inline-flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-medium transition hover:text-gray-300" onClick={downloadJson}>
+              <Download size={16} /> JSON
+            </button>
+            <button className="liquid-glass inline-flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-medium transition hover:text-gray-300" onClick={downloadCsv}>
+              <Download size={16} /> CSV
+            </button>
+          </div>
         </div>
       </aside>
     </div>
