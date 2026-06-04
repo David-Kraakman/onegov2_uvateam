@@ -17,9 +17,8 @@ import argparse
 import json
 from pathlib import Path
 
-import pandas as pd
 import numpy as np
-
+import pandas as pd
 
 # Age bin mapping: map source age labels to canonical 5-bin taxonomy
 AGE_MAPPINGS = {
@@ -550,6 +549,11 @@ def main() -> None:
     for col in age_cols:
         if col in df_86165.columns:
             age_band = col.replace("age_", "")
+            # Special handling for 65+ to match AGE_MAPPINGS format
+            if age_band == "65_plus":
+                age_band = "65+"
+            else:
+                age_band = age_band.replace("_", "-")
             age_spine[age_band] = df_86165[col].sum()
     
     age_spine_df = pd.DataFrame(list(age_spine.items()), columns=["age_band", "count"])
