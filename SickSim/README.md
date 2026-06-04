@@ -24,7 +24,19 @@ npm run build
 
 ## Belangrijke bestanden
 
-- `src/main.tsx`: alle React-schermen, navigatie, configuratievelden en de `Run Sim` knop.
+- `src/main.tsx`: startpunt van React; rendert alleen de app.
+- `src/App.tsx`: hoofdscherm, actieve pagina en navigatie tussen pagina's.
+- `src/pages/SimulationConfiguration.tsx`: configuratieformulier en de `Run Sim` knop.
+- `src/pages/SimulationRun.tsx`: scherm dat je ziet na `Run Sim`.
+- `src/pages/NetworkGeneration.tsx`: netwerkvisualisatie en netwerkstatistieken.
+- `src/pages/PipelineOverview.tsx`: pipeline-uitleg.
+- `src/components/BackgroundVideo.tsx`: achtergrondvideo en pauzeren op het eindframe.
+- `src/components/Navbar.tsx`: bovenste navigatiebalk.
+- `src/components/FormControls.tsx`: gedeelde formuliervelden, titel en sliders.
+- `src/components/DataFactorRow.tsx`: losse rij voor een aan/uit datafactor.
+- `src/components/NetworkCanvas.tsx`: mock-netwerkcanvas.
+- `src/components/SeirChart.tsx`: mock-SEIR grafiek.
+- `src/constants/appConstants.ts`: URLs, navigatiepagina's en datafactor-labels.
 - `src/styles.css`: globale styling, liquid-glass effect, scrollbar, buttons en input-styling.
 - `src/data/utrechtData.ts`: plek om Utrecht-data, CBS-tabellen, buurten, RWZI-data of netwerkmetadata in te plakken.
 - `index.html`: Google Font import en root-element.
@@ -32,7 +44,7 @@ npm run build
 
 ## Run Sim aanpassen
 
-De configuratiepagina staat in `src/main.tsx` in de component:
+De configuratiepagina staat in `src/pages/SimulationConfiguration.tsx` in de component:
 
 ```tsx
 function SimulationConfiguration({ onRun }: { onRun: () => void }) {
@@ -49,6 +61,7 @@ De knop zelf staat onderaan die component:
 Op dit moment wisselt `onRun` alleen naar het simulatiescherm. Dat gebeurt in de hoofdcomponent:
 
 ```tsx
+// src/App.tsx
 {activePage === 'Simulatie' && <SimulationConfiguration onRun={() => goToPage('Simulatie run')} />}
 ```
 
@@ -78,4 +91,3 @@ accept=".json,.csv,application/json,text/csv"
 ```
 
 Momenteel wordt alleen de bestandsnaam opgeslagen. Als je de inhoud wilt gebruiken, moet je in de `onChange` handler het bestand uitlezen met `file.text()` en daarna JSON of CSV parsen.
-
