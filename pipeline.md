@@ -13,22 +13,23 @@ The table below maps the variables from the variables.md catalog to their respec
 | **Leeftijdsverdeling** | 86165NED | **Seed & IPF** | The central spine. Local margins limit the national seed. |
 | **Migratieachtergrond** | 86165NED & 83931NED | **Seed & IPF** | Jointly seeded with Age/Income; constrained locally. |
 | **Inkomen** | 86165NED & 83931NED | **Seed & IPF** | Jointly seeded with Age/Mig; constrained locally. |
-| **Huishoudsamenstelling** | 86165NED & 37312 | **Seed & IPF** | Jointly seeded with Age; constrained locally. |
-| **Opleidingsniveau** | 85321NED | **Seed** | Seeded with Age/Employment to preserve structural links. No strict local marginals available in 86165NED, so it emerges from the IPF projection. |
-| **Arbeidsdeelname** | 85321NED | **Seed** | Seeded with Age/Education. Emerges from IPF projection. |
+| **Huishoudsamenstelling** | 86165NED & 37620 | **Seed & IPF** | Jointly seeded with Age; constrained locally. |
+| **Opleidingsniveau** | 85307NED (via 85321NED) | **Seed** | Seeded jointly with Employment to preserve collinearity. Emerges from the IPF projection. |
+| **Arbeidsdeelname** | 82309NED (via 85321NED) | **Seed** | Seeded jointly with Education. Emerges from the IPF projection. |
 | **Schoolgaande kinderen** | 86165NED (derived) | **Post-Processing** | Derived via integer age imputation after IPF completes. |
 | **Woon-werkafstand** | 84709NED | **Post-Processing** | Behavioral outcome. Assigned via Monte Carlo simulation conditioned on Employment and Age. |
 | **Landgebruik (Groen/Water)** | 70262NED | **Post-Processing** | Spatial metadata. Deterministic relational join via Buurtcode. |
 | **Autobezit (Could-have)** | 86165NED | **Post-Processing** | Assigned probabilistically based on Household composition. |
-| **Nabijheid Zorg (Could-have)** | 85870NED | **Post-Processing** | Spatial metadata. Deterministic relational join via Buurtcode. |
+| **Nabijheid Zorg & Voorzieningen (Could-have)** | 85870NED / open BAG | **Post-Processing** | Spatial metadata for hospitals (SEH), nursing homes, and institutional catchments. Relational join via Buurtcode. |
+| **Toerisme (Would-have)** | 82059NED | **Post-Processing** | Spatial metadata (overnight stays). Relational join via municipal/neighborhood proxy. |
 
 ## **Phase 1: Seed Preparation (National / Municipal Level)**
 
 The objective is to create a single N-dimensional seed matrix representing the "global prior" of demographic correlations, avoiding conflicting overlapping margins.
 
-1. **Extract Joint Tables:** Pull 83931NED (Age × Mig × Inc), 37312 (Age × HH), and 85321NED (Age × Edu × Emp).  
+1. **Extract Joint Tables:** Pull 83931NED (Age × Mig × Inc), 37620 (Age × HH), and 85321NED (Age × Edu × Emp). Note: 85321NED replaces independent tables 85307NED and 82309NED to guarantee structural correlation between education and employment.  
 2. **Taxonomy Alignment:** Aggregate the granular age bins in the joint tables to match the coarse bins required by the local constraints (0–14, 15–24, 25–44, 45–64, 65+).  
-3. **Spine Harmonization:** Extract the 1D national Age distribution. Force-scale the marginalized Age distributions of 83931NED, 37312, and 85321NED to perfectly match this single national Age array.  
+3. **Spine Harmonization:** Extract the 1D national Age distribution. Force-scale the marginalized Age distributions of 83931NED, 37620, and 85321NED to perfectly match this single national Age array.  
 4. **Seed Matrix Calculation:** Generate a Cartesian product DataFrame of all variable categories. Calculate the base weight (total) for each row by applying the Naive Bayes assumption of conditional independence given Age:  
    P(Row) \= P(Age) \* P(Mig, Inc | Age) \* P(HH | Age) \* P(Edu, Emp | Age)  
 5. **Structural Zeros:** Hardcode impossible combinations to 0.0 (e.g., Age 0-14 and Master's degree) to speed up convergence and enforce logic.
@@ -52,7 +53,10 @@ The output of Phase 2 is an aggregate table of fitted weights. It must be conver
 1. **Instantiation:** Apply stochastic rounding to the fitted weights. Expand the rows so that a weight of 50 becomes 50 distinct rows. Assign a unique Actor\_ID.  
 2. **Integer Age Imputation:** For actors in the "0-14" and "15-24" brackets, draw an integer age from the national 1-year age distribution (03759NED).  
 3. **School-Going Flag:** Evaluate the integer age. If the actor is between 4 and 17, flag Schoolgaand \= True.  
-4. **Spatial Joins (Meta/Context):** Perform a left join on the microdata using Buurtcode against tables 70262NED and 85870NED to append environmental percentages (Groen/Water) and distances to hospitals.  
+4. **Spatial Joins (Meta/Context):** Perform a left join on the microdata using Buurtcode against the following tables to append spatial metadata:  
+   * 70262NED: Environmental percentages (Groen/Water).  
+   * 85870NED & open BAG: Distances to hospitals (SEH), nursing homes, and institutional catchment types.  
+   * 82059NED: Tourist overnight stays per year.  
 5. **Behavioral Assignment (Mobility):** \* Isolate actors where Arbeidsdeelname \== True.  
    * Query the ODiN dataset (84709NED) to find the probability distribution of commute distance for their specific Age and Income bracket.  
    * Use weighted random selection (np.random.choice) to assign a specific woon\_werkafstand.
