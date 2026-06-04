@@ -38,25 +38,31 @@ export function runNetworkSeir(network: NetworkData | null, config: SimulationCo
   let exposed = 0;
   let infectious = 1;
   let recovered = 0;
+  const points: SeirPoint[] = [];
+  const maxDays = 120;
 
-  return Array.from({ length: 42 }, (_, day) => {
+  for (let day = 0; day < maxDays; day += 1) {
     const newExposed = Math.min(susceptible, transmissionRate * infectious * susceptible / population);
     const newInfectious = Math.min(exposed, exposed * incubationRate);
     const newRecovered = Math.min(infectious, infectious * recoveryRate);
 
-    const point = {
+    points.push({
       day,
       susceptible,
       exposed,
       infectious,
       recovered,
-    };
+    });
 
     susceptible -= newExposed;
     exposed += newExposed - newInfectious;
     infectious += newInfectious - newRecovered;
     recovered += newRecovered;
 
-    return point;
-  });
+    if (day >= 20 && exposed + infectious < 0.5) {
+      break;
+    }
+  }
+
+  return points;
 }

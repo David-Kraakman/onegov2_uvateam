@@ -6,7 +6,13 @@ type PositionedNode = {
   y: number;
 };
 
-export function NetworkCanvas({ network }: { network: NetworkData | null }) {
+type NetworkCanvasProps = {
+  network: NetworkData | null;
+  selectedNodeId?: string;
+  onNodeSelect?: (nodeId: string) => void;
+};
+
+export function NetworkCanvas({ network, selectedNodeId, onNodeSelect }: NetworkCanvasProps) {
   const nodes: PositionedNode[] = network ? network.nodes.map((node, i) => {
     const angle = (i / Math.max(network.nodes.length, 1)) * Math.PI * 2;
     const ring = 110 + (i % 4) * 38;
@@ -31,9 +37,23 @@ export function NetworkCanvas({ network }: { network: NetworkData | null }) {
         if (!source || !target) return null;
         return <line key={`${edge.source}-${edge.target}-${index}`} x1={source.x} y1={source.y} x2={target.x} y2={target.y} stroke="rgba(255,255,255,0.2)" strokeWidth="1" />;
       })}
-      {nodes.map((node, i) => (
-        <circle key={node.id} cx={node.x} cy={node.y} r={i % 4 === 0 ? 8 : 5} fill="white" opacity={i % 4 === 0 ? 0.95 : 0.65} />
-      ))}
+      {nodes.map((node, i) => {
+        const selected = node.id === selectedNodeId;
+        return (
+          <circle
+            key={node.id}
+            cx={node.x}
+            cy={node.y}
+            r={selected ? 9 : i % 4 === 0 ? 8 : 5}
+            fill="white"
+            stroke={selected ? 'rgba(255,255,255,0.95)' : 'transparent'}
+            strokeWidth={selected ? 2 : 0}
+            opacity={selected ? 1 : i % 4 === 0 ? 0.95 : 0.65}
+            style={{ cursor: onNodeSelect ? 'pointer' : 'default' }}
+            onClick={() => onNodeSelect?.(node.id)}
+          />
+        );
+      })}
       {network && <text x="20" y="34" fill="rgba(255,255,255,0.72)" fontSize="13">{network.nodes.length} knopen, {network.edges.length} verbindingen</text>}
     </svg>
   );

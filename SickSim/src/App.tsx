@@ -23,9 +23,19 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, [activePage]);
 
-  const goToPage = (page: Page) => {
+  const [lastSimulationPage, setLastSimulationPage] = React.useState<Page>('Simulatie');
+
+  const goToPage = (page: Page, forceSimulationConfig = false) => {
+    if (page === activePage || (page === 'Simulatie' && activePage === 'Simulatie run' && !forceSimulationConfig)) {
+      return;
+    }
+
+    const nextPage = page === 'Simulatie' && lastSimulationPage === 'Simulatie run' && !forceSimulationConfig
+      ? 'Simulatie run'
+      : page;
+
     setLoaded(false);
-    setActivePage(page);
+    setActivePage(nextPage);
   };
 
   return (
@@ -42,10 +52,22 @@ export function App() {
               network={network}
               onConfigChange={setSimulationConfig}
               onNetworkLoaded={setNetwork}
-              onRun={() => goToPage('Simulatie run')}
+              onRun={() => {
+                setLastSimulationPage('Simulatie run');
+                goToPage('Simulatie run');
+              }}
             />
           )}
-          {activePage === 'Simulatie run' && <SimulationRun config={simulationConfig} network={network} />}
+          {activePage === 'Simulatie run' && (
+            <SimulationRun
+              config={simulationConfig}
+              network={network}
+              onBack={() => {
+                setLastSimulationPage('Simulatie');
+                goToPage('Simulatie', true);
+              }}
+            />
+          )}
         </section>
       </div>
     </main>

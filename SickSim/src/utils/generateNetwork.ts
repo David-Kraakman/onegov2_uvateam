@@ -1,9 +1,14 @@
-import type { NetworkData, NetworkEdge, NetworkNode } from '../types';
+import type { AgentProfile, NetworkData, NetworkEdge, NetworkNode } from '../types';
 
 type GenerateNetworkOptions = {
   nodeCount?: number;
   averageDegree?: number;
 };
+
+const buurtcodes = ['BU1180', 'BU1181', 'BU1182', 'BU1183', 'WK0301', 'WK0302'];
+const wijkcodes = ['WK0101', 'WK0102', 'WK0103', 'WK0201', 'WK0202'];
+const woningtypes = ['appartement', 'rijtjeshuis', 'vrijstaand'] as const;
+const huishoudenSamenstellingen = ['Eenpersoon', 'Koppel', 'Gezin', 'Groot gezin'] as const;
 
 export function generateSyntheticNetwork(options: GenerateNetworkOptions = {}): NetworkData {
   const nodeCount = options.nodeCount ?? 160;
@@ -12,7 +17,7 @@ export function generateSyntheticNetwork(options: GenerateNetworkOptions = {}): 
   const edges = createEdges(nodes, averageDegree);
 
   return {
-    fileName: `gegenereerd-utrecht-netwerk-${Date.now()}.json`,
+    fileName: `gegenereerd-netwerk-${Date.now()}.json`,
     nodes,
     edges,
     warnings: [],
@@ -28,12 +33,74 @@ function createNodes(nodeCount: number): NetworkNode[] {
     const ring = 90 + (index % 5) * 34 + randomNumber(-18, 18);
 
     return {
-      id: `utrecht-${index + 1}`,
-      label: `Utrecht agent ${index + 1}`,
+      id: `persoon-${index + 1}`,
+      label: `Persoon ${index + 1}`,
       x: 300 + centerJitterX + Math.cos(angle) * ring,
       y: 240 + centerJitterY + Math.sin(angle) * ring,
+      profile: createAgentProfile(index),
     };
   });
+}
+
+function createAgentProfile(index: number): AgentProfile {
+  const buurtIndex = index % buurtcodes.length;
+  const wijkIndex = index % wijkcodes.length;
+  const woonkamerTypeIndex = index % woningtypes.length;
+  const huishoudgrootte = randomInteger(1, 5);
+  const leeftijdsverdeling = generateAgeDistribution();
+  const opleiding = generateEducationDistribution();
+  const woningtype = woningtypes[woonkamerTypeIndex];
+
+  return {
+    buurtcode: buurtcodes[buurtIndex],
+    wijkcode: wijkcodes[wijkIndex],
+    bevolkingsomvang: randomInteger(900, 12000),
+    leeftijdsverdeling,
+    huishoudgrootte,
+    huishoudenSamenstelling: huishoudenSamenstellingen[randomInteger(0, huishoudenSamenstellingen.length - 1)],
+    aandeelNietWesterseAchtergrond: randomInteger(3, 35),
+    woningtype,
+    bezettingsgraadWoning: Number((randomNumber(1.2, 2.4)).toFixed(1)),
+    gemiddeldBestedbaarInkomen: randomInteger(22000, 72000),
+    stedelijkheidsgraad: randomInteger(20, 100),
+    opleidingsniveau: opleiding,
+    rwzi: {
+      id: `RWZI-${100 + index}`,
+      naam: `RWZI locatie ${index + 1}`,
+      locatie: `Utrecht-${wijkcodes[wijkIndex]}`,
+      capaciteit: randomInteger(1500, 8500),
+    },
+    catchment: {
+      oppervlakteKm2: Number(randomNumber(4.2, 22.5).toFixed(1)),
+      aansluitingen: randomInteger(4200, 14800),
+    },
+    landgebruik: {
+      woongebied: randomInteger(22, 58),
+      industrie: randomInteger(5, 28),
+      agrarisch: randomInteger(8, 38),
+    },
+    nabijheidHavenKm: Number(randomNumber(8, 95).toFixed(1)),
+  };
+}
+
+function generateAgeDistribution() {
+  const distribution = {
+    '0-14': randomInteger(8, 20),
+    '15-24': randomInteger(8, 18),
+    '25-44': randomInteger(22, 34),
+    '45-64': randomInteger(20, 30),
+    '65+': 0,
+  };
+  const total = distribution['0-14'] + distribution['15-24'] + distribution['25-44'] + distribution['45-64'];
+  distribution['65+'] = 100 - total;
+  return distribution;
+}
+
+function generateEducationDistribution() {
+  const laag = randomInteger(18, 40);
+  const midden = randomInteger(22, 46);
+  const hoog = Math.max(5, 100 - laag - midden);
+  return { laag, midden, hoog };
 }
 
 function createEdges(nodes: NetworkNode[], averageDegree: number): NetworkEdge[] {
