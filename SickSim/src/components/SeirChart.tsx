@@ -15,9 +15,14 @@ const topPadding = 20;
 const bottomPadding = 60;
 const svgWidth = 580;
 
-export function SeirChart({ points }: { points: SeirPoint[] }) {
+type SeirChartProps = {
+  points: SeirPoint[];
+  selectedSeries: typeof series[number]['key'];
+  onSeriesChange: (selectedSeries: typeof series[number]['key']) => void;
+};
+
+export function SeirChart({ points, selectedSeries, onSeriesChange }: SeirChartProps) {
   const chartContainerRef = React.useRef<HTMLDivElement | null>(null);
-  const [selectedSeries, setSelectedSeries] = React.useState<typeof series[number]['key']>('infectious');
   const [hoverIndex, setHoverIndex] = React.useState<number | null>(null);
   const [hoverX, setHoverX] = React.useState<number | null>(null);
   const totalPopulation = points[0]
@@ -73,7 +78,7 @@ export function SeirChart({ points }: { points: SeirPoint[] }) {
             <button
               key={item.key}
               type="button"
-              onClick={() => setSelectedSeries(item.key)}
+              onClick={() => onSeriesChange(item.key)}
               className={`rounded-full border px-3 py-2 text-sm font-medium transition ${selectedSeries === item.key ? 'border-white bg-white/10 text-white' : 'border-white/10 text-gray-300 hover:border-white/20 hover:text-white'}`}
               style={{ boxShadow: selectedSeries === item.key ? `0 0 0 1px ${item.color}` : undefined }}
             >

@@ -3,6 +3,9 @@
 Sick Sim is een React + TypeScript + Tailwind dashboard voor het configureren en starten van een epidemiologische simulatie voor Utrecht.
 
 ## Starten
+ga naar map:
+
+cd SickSim
 
 Installeer dependencies:
 

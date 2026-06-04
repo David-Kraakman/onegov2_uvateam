@@ -1,11 +1,22 @@
+import React from 'react';
 import { Activity, ArrowLeft, Pause, Play, RotateCcw } from 'lucide-react';
 import { SeirChart } from '../components/SeirChart';
 import type { NetworkData, SimulationConfig } from '../types';
 import { getNetworkStats, runNetworkSeir } from '../utils/networkStats';
 
+type SeriesKey = 'susceptible' | 'exposed' | 'infectious' | 'recovered';
+
 export function SimulationRun({ network, config, onBack }: { network: NetworkData | null; config: SimulationConfig; onBack: () => void }) {
+  const [selectedSeries, setSelectedSeries] = React.useState<SeriesKey>('infectious');
   const points = runNetworkSeir(network, config);
   const stats = getNetworkStats(network);
+  const selectedSeriesInfo = {
+    susceptible: { label: 'Vatbaar', description: 'Sociaal gezien nog vatbare mensen.' },
+    exposed: { label: 'Besmet', description: 'Besmet, maar nog niet zelf besmettelijk.' },
+    infectious: { label: 'Infectieus', description: 'Actief besmettelijke personen die anderen kunnen besmetten.' },
+    recovered: { label: 'Hersteld', description: 'Hersteld en niet langer vatbaar voor nieuwe besmetting.' },
+  } as const;
+  const selectedInfo = selectedSeriesInfo[selectedSeries];
   const population = points[0]
     ? points[0].susceptible + points[0].exposed + points[0].infectious + points[0].recovered
     : 0;
@@ -23,7 +34,7 @@ export function SimulationRun({ network, config, onBack }: { network: NetworkDat
               <ArrowLeft size={16} /> Terug
             </button>
           </div>
-          <SeirChart points={points} />
+          <SeirChart points={points} selectedSeries={selectedSeries} onSeriesChange={setSelectedSeries} />
           <p className="mt-3 text-sm text-gray-300">
             Gebaseerd op {stats.nodeCount.toLocaleString('nl-NL')} knopen, {stats.edgeCount.toLocaleString('nl-NL')} verbindingen en beta {config.beta.toFixed(2)}.
           </p>
@@ -47,6 +58,22 @@ export function SimulationRun({ network, config, onBack }: { network: NetworkDat
               </div>
 
               <div className="grid gap-3">
+                <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
+                  <div className="text-xs uppercase tracking-[0.24em] text-gray-500">Geselecteerde serie</div>
+                  <div className="mt-2 text-xl font-semibold text-white">{selectedInfo.label}</div>
+                  <div className="mt-2 text-sm text-gray-400">{selectedInfo.description}</div>
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.24em] text-gray-500">Laatste dag</div>
+                      <div className="mt-2 text-lg font-semibold text-white">{points[points.length - 1][selectedSeries].toLocaleString('nl-NL')}</div>
+                      <div className="text-xs text-slate-400">{((points[points.length - 1][selectedSeries] / population) * 100).toFixed(1)}% van populatie</div>
+                    </div>
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.24em] text-gray-500">Dag</div>
+                      <div className="mt-2 text-lg font-semibold text-white">{points[points.length - 1].day}</div>
+                    </div>
+                  </div>
+                </div>
                 <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
                   <div className="text-xs uppercase tracking-[0.24em] text-gray-500">Netwerk</div>
                   <div className="mt-2 text-xl font-semibold text-white">{stats.nodeCount.toLocaleString('nl-NL')} knopen</div>
