@@ -39,7 +39,7 @@ export function SimulationRun({ network, config, dataFactors, onBack }: { networ
           </div>
           <SeirChart points={points} selectedSeries={selectedSeries} onSeriesChange={setSelectedSeries} />
           <p className="mt-3 text-sm text-gray-300">
-            Gebaseerd op {stats.nodeCount.toLocaleString('nl-NL')} knopen, {stats.edgeCount.toLocaleString('nl-NL')} verbindingen en beta {config.beta.toFixed(2)}.
+            Gebaseerd op {stats.nodeCount.toLocaleString('nl-NL')} knopen, {stats.edgeCount.toLocaleString('nl-NL')} verbindingen en beta {config.beta.toFixed(0)}%.
           </p>
           <div className="mt-5 flex flex-wrap gap-3">
             <button className="control-button"><Play size={16} /> Start</button>
@@ -84,10 +84,10 @@ export function SimulationRun({ network, config, dataFactors, onBack }: { networ
                 </div>
                 <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
                   <div className="text-xs uppercase tracking-[0.24em] text-gray-500">Simulatie</div>
-                  <div className="mt-2 text-base font-semibold text-white">Beta: {config.beta.toFixed(2)}</div>
+                  <div className="mt-2 text-base font-semibold text-white">Beta: {config.beta.toFixed(0)}%</div>
                   <div className="mt-1 text-sm text-gray-400">Incubatie: {config.incubationDays} dagen</div>
                   <div className="text-sm text-gray-400">Besmettelijk: {config.infectiousDays} dagen</div>
-                  <div className="text-sm text-gray-400">Herstelkans: {(config.recoveryChance * 100).toFixed(0)}%</div>
+                  <div className="text-sm text-gray-400">Herstelkans: {config.recoveryChance.toFixed(0)}%</div>
                   <div className="text-sm text-gray-400">Asymptomatisch: {config.asymptomaticPercentage}%</div>
                   <div className="text-sm text-gray-400">Lethaliteit: {config.lethalityChance}%</div>
                   <div className="text-sm text-gray-400">Immuniteit kans: {config.immunityChance}%</div>

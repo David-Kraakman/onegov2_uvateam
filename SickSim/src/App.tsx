@@ -13,10 +13,10 @@ export function App() {
   const [loaded, setLoaded] = React.useState(false);
   const [network, setNetwork] = React.useState<NetworkData | null>(null);
   const [simulationConfig, setSimulationConfig] = React.useState<SimulationConfig>({
-    beta: 0.28,
+    beta: 28,
     incubationDays: 3,
     infectiousDays: 6,
-    recoveryChance: 0.18,
+    recoveryChance: 18,
     asymptomaticPercentage: 32,
     immunityChance: 100,
     lethalityChance: 0,

@@ -26,6 +26,24 @@ export function getNetworkStats(network: NetworkData | null): NetworkStats {
   };
 }
 
+function randomBinomial(trials: number, probability: number): number {
+  if (trials <= 0 || probability <= 0) {
+    return 0;
+  }
+  if (probability >= 1) {
+    return trials;
+  }
+
+  let successes = 0;
+  for (let i = 0; i < trials; i += 1) {
+    if (Math.random() < probability) {
+      successes += 1;
+    }
+  }
+
+  return successes;
+}
+
 export function runNetworkSeir(network: NetworkData | null, config: SimulationConfig, dataFactors: DataFactor[]): SeirPoint[] {
   const stats = getNetworkStats(network);
   const population = Math.max(stats.nodeCount, 1);
@@ -33,11 +51,11 @@ export function runNetworkSeir(network: NetworkData | null, config: SimulationCo
   const factorMultiplier = calculateFactorMultiplier(network, dataFactors);
   const asymptomaticFraction = Math.max(0, Math.min(100, config.asymptomaticPercentage)) / 100;
   const asymptomaticMultiplier = 1 + asymptomaticFraction * 0.5;
-  const transmissionRate = Math.min(0.95, config.beta * averageContacts * 0.12 * factorMultiplier * asymptomaticMultiplier);
+  const transmissionRate = Math.min(0.95, (config.beta / 100) * averageContacts * 0.12 * factorMultiplier * asymptomaticMultiplier);
   const incubationRate = 1 / Math.max(config.incubationDays, 1);
   const infectiousDuration = Math.max(config.infectiousDays, 1);
   const recoveryRateFromDuration = 1 / infectiousDuration;
-  const recoveryRate = Math.max(0, Math.min(1, (config.recoveryChance + recoveryRateFromDuration) / 2));
+  const recoveryRate = Math.max(0, Math.min(1, ((config.recoveryChance / 100) + recoveryRateFromDuration) / 2));
   const immunityFraction = Math.max(0, Math.min(100, config.immunityChance)) / 100;
   const lethalityFraction = Math.max(0, Math.min(100, config.lethalityChance)) / 100;
 
@@ -48,12 +66,6 @@ export function runNetworkSeir(network: NetworkData | null, config: SimulationCo
   let deaths = 0;
   const points: SeirPoint[] = [];
   const maxDays = 360;
-
-  let exposedRemainder = 0;
-  let infectiousRemainder = 0;
-  let recoveryRemainder = 0;
-  let immuneRemainder = 0;
-  let deathRemainder = 0;
   let day = 0;
 
   while (day < maxDays) {
@@ -66,67 +78,21 @@ export function runNetworkSeir(network: NetworkData | null, config: SimulationCo
       deaths,
     });
 
-    const rawNewExposed = transmissionRate * infectious * susceptible / population + exposedRemainder;
-    const rawNewInfectious = exposed * incubationRate + infectiousRemainder;
-    const rawNewRecovered = infectious * recoveryRate + recoveryRemainder;
-
-    const newExposed = Math.min(susceptible, Math.max(0, Math.floor(rawNewExposed)));
-    const newInfectious = Math.min(exposed, Math.max(0, Math.floor(rawNewInfectious)));
-    const newRecovered = Math.min(infectious, Math.max(0, Math.floor(rawNewRecovered)));
-
-    exposedRemainder = rawNewExposed - newExposed;
-    infectiousRemainder = rawNewInfectious - newInfectious;
-    recoveryRemainder = rawNewRecovered - newRecovered;
-
-    const rawDeathCount = newRecovered * lethalityFraction + deathRemainder;
-    const deathCount = Math.max(0, Math.floor(rawDeathCount));
+    const alivePopulation = Math.max(susceptible + exposed + infectious + recovered, 1);
+    const infectionProbability = Math.min(1, transmissionRate * infectious / alivePopulation);
+    const newExposed = randomBinomial(susceptible, infectionProbability);
+    const newInfectious = randomBinomial(exposed, incubationRate);
+    const newRecovered = randomBinomial(infectious, recoveryRate);
+    const deathCount = randomBinomial(newRecovered, lethalityFraction);
     const survivors = newRecovered - deathCount;
-    deathRemainder = rawDeathCount - deathCount;
-
-    const rawImmuneRecoveries = survivors * immunityFraction + immuneRemainder;
-    const immuneRecoveries = Math.max(0, Math.floor(rawImmuneRecoveries));
+    const immuneRecoveries = randomBinomial(survivors, immunityFraction);
     const recoveredToSusceptible = survivors - immuneRecoveries;
-    immuneRemainder = rawImmuneRecoveries - immuneRecoveries;
 
-    let nextSusceptible = susceptible - newExposed + recoveredToSusceptible;
-    let nextExposed = exposed + newExposed - newInfectious;
-    let nextInfectious = infectious + newInfectious - newRecovered;
-    let nextRecovered = recovered + immuneRecoveries;
-    let nextDeaths = deaths + deathCount;
-
-    const total = nextSusceptible + nextExposed + nextInfectious + nextRecovered + nextDeaths;
-    const diff = population - total;
-
-    if (diff !== 0) {
-      if (diff > 0) {
-        nextSusceptible += diff;
-      } else {
-        let remaining = -diff;
-        const subtractFrom = [
-          () => Math.min(nextRecovered, remaining),
-          () => Math.min(nextInfectious, remaining),
-          () => Math.min(nextExposed, remaining),
-          () => Math.min(nextSusceptible, remaining),
-        ];
-        const update = [
-          (value: number) => { nextRecovered -= value; remaining -= value; },
-          (value: number) => { nextInfectious -= value; remaining -= value; },
-          (value: number) => { nextExposed -= value; remaining -= value; },
-          (value: number) => { nextSusceptible -= value; remaining -= value; },
-        ];
-
-        for (let i = 0; i < subtractFrom.length && remaining > 0; i += 1) {
-          const amount = subtractFrom[i]();
-          update[i](amount);
-        }
-      }
-    }
-
-    nextSusceptible = Math.max(0, Math.round(nextSusceptible));
-    nextExposed = Math.max(0, Math.round(nextExposed));
-    nextInfectious = Math.max(0, Math.round(nextInfectious));
-    nextRecovered = Math.max(0, Math.round(nextRecovered));
-    nextDeaths = Math.max(0, Math.round(nextDeaths));
+    const nextSusceptible = Math.max(0, susceptible - newExposed + recoveredToSusceptible);
+    const nextExposed = Math.max(0, exposed + newExposed - newInfectious);
+    const nextInfectious = Math.max(0, infectious + newInfectious - newRecovered);
+    const nextRecovered = Math.max(0, recovered + immuneRecoveries);
+    const nextDeaths = Math.max(0, deaths + deathCount);
 
     if (nextExposed + nextInfectious === 0) {
       points.push({

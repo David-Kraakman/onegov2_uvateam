@@ -75,7 +75,16 @@ export function SimulationConfiguration({ config, network, dataFactors, onConfig
                 </label>
                 {networkStatus && <span className="mt-2 block text-xs text-gray-300">{networkStatus}</span>}
               </Field>
-              <Range label="Basis transmissie per contact (beta)" hint="Kans dat iemand besmet raakt bij 1 contact" min={0} max={1} step={0.01} initialValue={config.beta} decimals={2} onValueChange={(beta) => updateConfig({ beta })} />
+              <Range
+                label="Basis transmissie per contact (beta)"
+                hint="Kans dat iemand besmet raakt bij 1 contact, in procenten"
+                min={0}
+                max={100}
+                step={1}
+                initialValue={config.beta}
+                suffix="%"
+                onValueChange={(beta) => updateConfig({ beta })}
+              />
               <Field label="Incubatietijd" hint="Tijd voordat iemand besmettelijk wordt in dagen"><input type="number" value={config.incubationDays} onChange={(event) => updateConfig({ incubationDays: Number(event.target.value) })} /></Field>
               <Field label="Besmettelijke periode" hint="Gemiddeld aantal dagen dat iemand anderen kan besmetten"><input type="number" value={config.infectiousDays} onChange={(event) => updateConfig({ infectiousDays: Number(event.target.value) })} /></Field>
               <Range
@@ -92,10 +101,10 @@ export function SimulationConfiguration({ config, network, dataFactors, onConfig
                 label="Herstelkans per dag"
                 hint="Dagelijkse kans op herstel; wordt gecombineerd met de infectieuze duur"
                 min={0}
-                max={1}
-                step={0.01}
+                max={100}
+                step={1}
                 initialValue={config.recoveryChance}
-                decimals={2}
+                suffix="%"
                 onValueChange={(recoveryChance) => updateConfig({ recoveryChance })}
               />
               <Range
