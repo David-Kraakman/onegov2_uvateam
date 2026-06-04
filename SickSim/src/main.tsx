@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { Activity, BarChart3, Code2, Database, Download, GitBranch, Map, Pause, Play, RotateCcw } from 'lucide-react';
+import { Activity, BarChart3, Code2, Database, Download, FileUp, GitBranch, Map, Pause, Play, RotateCcw } from 'lucide-react';
 import { utrechtData } from './data/utrechtData';
 import './styles.css';
 
@@ -211,6 +211,7 @@ function NetworkCanvas() {
 
 function SimulationConfiguration({ onRun }: { onRun: () => void }) {
   const [immune, setImmune] = React.useState(true);
+  const [networkFileName, setNetworkFileName] = React.useState('');
   const [dataFactors, setDataFactors] = React.useState<DataFactor[]>(
     factorLabels.map((label, index) => ({ label, enabled: index < 10, weight: index % 4 === 0 ? 1.4 : 1 })),
   );
@@ -227,7 +228,22 @@ function SimulationConfiguration({ onRun }: { onRun: () => void }) {
           <div className="custom-scrollbar relative z-10 max-h-[60vh] overflow-y-auto pr-2">
             <SectionTitle icon={<Activity size={18} />} title="Epidemiologische variabelen" />
             <div className="grid gap-5 md:grid-cols-2">
-              <Field label="Startlocatie"><select defaultValue="Utrecht"><option>Utrecht</option></select></Field>
+              <Field label="Netwerk" hint="Voeg hier een netwerkbestand toe in JSON- of CSV-formaat.">
+                <label className="flex min-h-[48px] cursor-pointer items-center justify-between gap-3 rounded-lg border border-white/15 bg-black/40 px-3 py-2 transition hover:border-white/30 hover:bg-black/55">
+                  <span className="min-w-0 truncate text-sm text-gray-300">
+                    {networkFileName || 'Nog geen netwerkbestand geselecteerd'}
+                  </span>
+                  <span className="inline-flex shrink-0 items-center gap-2 rounded-md bg-white px-3 py-2 text-xs font-medium text-black">
+                    <FileUp size={15} /> Upload
+                  </span>
+                  <input
+                    className="sr-only"
+                    type="file"
+                    accept=".json,.csv,application/json,text/csv"
+                    onChange={(event) => setNetworkFileName(event.target.files?.[0]?.name ?? '')}
+                  />
+                </label>
+              </Field>
               <Range label="Basis transmissie per contact (beta)" hint="Kans dat iemand besmet raakt bij 1 contact" min={0} max={1} step={0.01} initialValue={0.28} decimals={2} />
               <Field label="Incubatietijd" hint="Tijd voordat iemand besmettelijk wordt in dagen"><input type="number" defaultValue={3} /></Field>
               <Field label="Besmettelijke periode" hint="Hoe lang iemand anderen kan besmetten in dagen"><input type="number" defaultValue={6} /></Field>
