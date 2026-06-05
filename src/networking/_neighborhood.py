@@ -3,7 +3,7 @@ from enum import Enum
 from itertools import combinations
 import networkx as nx
 import random
-import math
+import numpy as np
 
 household_size = 2
 
@@ -27,7 +27,6 @@ class HouseholdData:
     together: int
     kids: int
     problem_nodes: int
-    size_diff: float
 
     def copy(self):
         return HouseholdData(
@@ -35,7 +34,6 @@ class HouseholdData:
             together=self.together,
             kids=self.kids,
             problem_nodes=self.problem_nodes,
-            size_diff=self.size_diff,
         )
 
     def set(self, other):
@@ -43,7 +41,6 @@ class HouseholdData:
         self.together = other.together
         self.kids = other.kids
         self.problem_nodes = other.problem_nodes
-        self.size_diff = other.size_diff
 
 
 @dataclass
@@ -81,7 +78,6 @@ def classify_household(household: dict[int, Person]) -> HouseholdType:
 def remove_household(household: dict[int, Person], data: HouseholdData):
     household_type = classify_household(household)
     household_size = len(household)
-    data.size_diff -= abs(target_size - household_size)
     # Categorize household
     match household_type:
         case HouseholdType.SINGLE:
@@ -98,7 +94,6 @@ def remove_household(household: dict[int, Person], data: HouseholdData):
 def add_household(household: dict[int, Person], data: HouseholdData):
     household_type = classify_household(household)
     household_size = len(household)
-    data.size_diff += abs(target_size - household_size)
     # Categorize household
     match household_type:
         case HouseholdType.SINGLE:
@@ -169,7 +164,7 @@ def metropolis_criterion(
         return False
 
     # Probability of accepting worse solution
-    probability = math.exp((old_energy - new_energy) / temperature)
+    probability = np.exp((old_energy - new_energy) / temperature)
     return random.random() < probability
 
 
@@ -369,13 +364,17 @@ def apply_edge(g: nx.Graph, households: list[dict[int, Person]]):
 
 
 def count_households(households: list[dict[int, Person]]) -> HouseholdData:
-    data = HouseholdData(0, 0, 0, 0, 0)
+    data = HouseholdData(0, 0, 0, 0)
     for household in households:
         add_household(household, data)
     return data
 
 
-def link_neighborhood(g: nx.Graph):
+def link_neighborhood(
+    g: nx.Graph,
+    min_temperature: float = 1e-8,
+    iterations_per_temp: int = 100,
+):
     """
     Link households in the neighborhood using simulated annealing.
 
@@ -383,26 +382,33 @@ def link_neighborhood(g: nx.Graph):
     household distributions (single, together, kids). The energy function
     measures the squared difference from target values.
 
+    The initial temperature is dynamically scaled based on the initial energy
+    of the solution, ensuring the temperature range adapts to problem complexity.
+
     Args:
         g: NetworkX graph to optimize
+        temperature_scaling_factor: Multiplier for initial energy to set initial temperature.
+                                   Higher values = more exploration. Default: 0.5
+        cooling_rate: Factor to multiply temperature by each iteration. Default: 0.9999
+        min_temperature: Minimum temperature threshold before stopping. Default: 1e-8
+        iterations_per_temp: Number of iterations at each temperature level. Default: 100
     """
-    # Simulated annealing parameters
-    initial_temperature = 1000.0
-    cooling_rate = 0.9999
-    min_temperature = 1e-8
-    iterations_per_temp = 100
-
-    temperature = initial_temperature
-
     iteration = 0
+    initial_temperature = 0
+    cooling_rate = 0.999
 
     node_ids = list(g.nodes)
     households, household_index = infer_households(g)
     data = count_households(households)
     single, together, kids = distinguish_households(households)
 
+    temperature = initial_temperature
+    energy = calculate_energy(data)
+
     # Simulated annealing loop
-    while temperature > min_temperature:
+    optimization = True
+
+    while optimization or temperature > min_temperature:
         for _ in range(iterations_per_temp):
             # Generate neighbor solution
             change_household(
@@ -417,14 +423,17 @@ def link_neighborhood(g: nx.Graph):
             )
 
             iteration += 1
+        new_energy = calculate_energy(data)
+        if optimization and (new_energy >= energy):
+            optimization = False
+            temperature = np.log(new_energy)
 
         # Cool down
         temperature *= cooling_rate
+        energy = new_energy
 
+        print(f"Iteration {iteration}, T={temperature:.4f}, Energy={energy:.2f}")
         print(
-            f"Iteration {iteration}, T={temperature:.4f}, Energy={calculate_energy(data):.2f}"
-        )
-        print(
-            f"  Single: {data.single}, Together: {data.together}, Kids: {data.kids}, Problem:{data.problem_nodes} Size Difference:{data.size_diff}"
+            f"  Single: {data.single}, Together: {data.together}, Kids: {data.kids}, Problem:{data.problem_nodes}"
         )
     apply_edge(g, households)

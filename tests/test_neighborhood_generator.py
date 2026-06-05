@@ -21,7 +21,7 @@ from src.networking._neighborhood import (
 )
 
 
-def generate_test_network(num_nodes: int = 100, seed: int = None) -> nx.Graph:
+def generate_test_network(num_nodes: int = 100, seed: int | None = None) -> nx.Graph:
     """
     Generate a test network with isolated nodes and random ages.
 
@@ -49,7 +49,7 @@ def generate_test_network(num_nodes: int = 100, seed: int = None) -> nx.Graph:
 def test_household_data_copy():
     """Test HouseholdData.copy() method."""
     print("\n=== Test: HouseholdData.copy() ===")
-    data = HouseholdData(single=5, together=3, kids=2, problem_nodes=1, size_diff=2.5)
+    data = HouseholdData(single=5, together=3, kids=2, problem_nodes=1)
     try:
         copy = data.copy()
         print("✓ HouseholdData.copy() succeeded")
@@ -64,8 +64,8 @@ def test_household_data_copy():
 def test_household_data_set():
     """Test HouseholdData.set() method."""
     print("\n=== Test: HouseholdData.set() ===")
-    data1 = HouseholdData(single=5, together=3, kids=2, problem_nodes=1, size_diff=2.5)
-    data2 = HouseholdData(single=10, together=6, kids=4, problem_nodes=2, size_diff=5.0)
+    data1 = HouseholdData(single=5, together=3, kids=2, problem_nodes=1)
+    data2 = HouseholdData(single=10, together=6, kids=4, problem_nodes=2)
     try:
         data1.set(data2)
         print("✓ HouseholdData.set() succeeded")
