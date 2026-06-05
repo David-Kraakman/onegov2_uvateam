@@ -110,12 +110,13 @@ def find_buurt_row(df_86165: pd.DataFrame, buurt_identifier: str) -> pd.Series:
 
     raise ValueError(f"Could not find buurt with identifier: {buurt_identifier}")
 
-def extract_buurt_constraints(buurt_row: pd.Series) -> Dict[str, Dict[str, float]]:
+def extract_buurt_constraints(buurt_row: pd.Series, df_37620: pd.DataFrame = None) -> Dict[str, Dict[str, float]]:
     """
     Extract marginal constraints from a buurt row for IPF.
 
     Args:
         buurt_row: DataFrame row containing buurt data
+        df_37620: Optional DataFrame containing national household data for proper proportions
 
     Returns:
         Dictionary of constraints for IPF
@@ -136,12 +137,108 @@ def extract_buurt_constraints(buurt_row: pd.Series) -> Dict[str, Dict[str, float
         "Other": 0.0  # Add Other category to match seed matrix structure
     }
 
-    # Household composition
-    household_constraints = {
-        "Single": float(buurt_row["Eenpersoonshuishoudens_30"]),
-        "No_kids": float(buurt_row["HuishoudensZonderKinderen_31"]),
-        "With_kids": float(buurt_row["HuishoudensMetKinderen_32"])
-    }
+    # Household composition - use actual buurt data with national proportions for detailed breakdown
+    if df_37620 is not None:
+        # Get national household proportions by age group for detailed household types
+        national_household_proportions = {}
+
+        for age_group in age_constraints.keys():
+            age_df = df_37620[df_37620['age_band'] == age_group]
+            if len(age_df) > 0:
+                total_pop = age_df['total'].sum()
+                if total_pop > 0:
+                    proportions = {}
+                    for hh_type in age_df['household_type'].unique():
+                        hh_total = age_df[age_df['household_type'] == hh_type]['total'].sum()
+                        proportions[hh_type] = hh_total / total_pop
+                    national_household_proportions[age_group] = proportions
+
+        # Start with actual buurt household data
+        single_households = float(buurt_row["Eenpersoonshuishoudens_30"])
+        no_kids_households = float(buurt_row["HuishoudensZonderKinderen_31"])
+        with_kids_households = float(buurt_row["HuishoudensMetKinderen_32"])
+
+        # Calculate basic household counts (excluding single households)
+        other_households = no_kids_households + with_kids_households
+
+        # Calculate total household count
+        total_households = single_households + other_households
+
+        # Calculate average household size to scale to population
+        population = float(buurt_row["AantalInwoners_5"])
+        if total_households > 0 and population > 0:
+            avg_household_size = population / total_households
+        else:
+            avg_household_size = 1.0
+
+        # Calculate household constraints using national proportions but scaled to buurt population
+        household_constraints = {
+            "Single": single_households * avg_household_size,
+            "Cohabiting": 0.0,
+            "Cohabiting_no_kids": 0.0,
+            "Married_no_kids": 0.0,
+            "Cohabiting_with_kids": 0.0,
+            "Married_with_kids": 0.0,
+            "Single_parent": 0.0,
+            "Living_with_parents": 0.0,
+            "Total": 0.0
+        }
+
+        # Distribute the remaining households using national proportions
+        remaining_population = population - household_constraints["Single"]
+
+        if remaining_population > 0 and other_households > 0:
+            # Calculate proportions for non-single households from national data
+            non_single_proportions = {
+                "Cohabiting": 0.0,
+                "Cohabiting_no_kids": 0.0,
+                "Married_no_kids": 0.0,
+                "Cohabiting_with_kids": 0.0,
+                "Married_with_kids": 0.0,
+                "Single_parent": 0.0,
+                "Living_with_parents": 0.0
+            }
+
+            # Sum national proportions for non-single households
+            total_non_single_proportion = 0.0
+            for age_group, proportions in national_household_proportions.items():
+                for hh_type, proportion in proportions.items():
+                    if hh_type != "Single":
+                        non_single_proportions[hh_type] = non_single_proportions.get(hh_type, 0.0) + proportion
+                        total_non_single_proportion += proportion
+
+            # Normalize non-single proportions
+            if total_non_single_proportion > 0:
+                for hh_type in non_single_proportions:
+                    non_single_proportions[hh_type] /= total_non_single_proportion
+
+            # Apply proportions to remaining population
+            for hh_type, proportion in non_single_proportions.items():
+                household_constraints[hh_type] = remaining_population * proportion
+
+    else:
+        # Fallback to approximate splits if national data not available
+        no_kids_total = float(buurt_row["HuishoudensZonderKinderen_31"])
+        with_kids_total = float(buurt_row["HuishoudensMetKinderen_32"])
+
+        # Calculate household constraints using approximate splits
+        cohabiting_no_kids = no_kids_total * 0.5
+        married_no_kids = no_kids_total * 0.5
+        cohabiting_with_kids = with_kids_total * 0.3
+        married_with_kids = with_kids_total * 0.7
+        single_parent = with_kids_total * 0.1
+
+        household_constraints = {
+            "Single": float(buurt_row["Eenpersoonshuishoudens_30"]),
+            "Cohabiting": 0.0,
+            "Cohabiting_no_kids": cohabiting_no_kids,
+            "Married_no_kids": married_no_kids,
+            "Cohabiting_with_kids": cohabiting_with_kids,
+            "Married_with_kids": married_with_kids,
+            "Single_parent": single_parent,
+            "Living_with_parents": 0.0,
+            "Total": 0.0
+        }
 
     return {
         "age_band": age_constraints,
@@ -345,8 +442,9 @@ def execute_ipf(
         DataFrame with fitted weights
     """
     # Convert seed matrix to long format expected by ipfn
+    # Now include household_type in the pivot
     seed_matrix = seed_df.pivot_table(
-        index=["age_band", "education_group", "migration_group"],
+        index=["age_band", "education_group", "migration_group", "household_type"],
         values="weight",
         aggfunc="sum"
     ).fillna(0).reset_index()
@@ -363,18 +461,24 @@ def execute_ipf(
     age_aggregates = pd.Series(constraints["age_band"])
     migration_aggregates = pd.Series(constraints["migration_group"])
     education_aggregates = pd.Series(constraints["education_group"])
+    household_aggregates = pd.Series(constraints["household_type"])
 
-    # Execute IPF with all three constraints
+    # Execute IPF with all constraints including household
     ipf = ipfn_module.ipfn(
         seed_matrix,
-        [age_aggregates, migration_aggregates, education_aggregates],
-        [["age_band"], ["migration_group"], ["education_group"]]
+        [age_aggregates, migration_aggregates, education_aggregates, household_aggregates],
+        [["age_band"], ["migration_group"], ["education_group"], ["household_type"]]
     )
     fitted = ipf.iteration()
 
     # Convert back to DataFrame format
-    fitted_df = fitted.copy()
-    fitted_df = fitted_df.rename(columns={"total": "fitted_weight"})
+    if isinstance(fitted, pd.DataFrame):
+        fitted_df = fitted.copy()
+        fitted_df = fitted_df.rename(columns={"total": "fitted_weight"})
+    else:
+        # Handle case where fitted is not a DataFrame (convert from numpy array)
+        fitted_df = pd.DataFrame(fitted, columns=seed_matrix.columns)
+        fitted_df = fitted_df.rename(columns={"total": "fitted_weight"})
 
     return fitted_df
 
@@ -409,11 +513,11 @@ def validate_fitted_results(
             f"Found {len(negative_weights)} negative weights"
         )
 
-    # Check that fitted marginals match constraints (only for columns used in IPF)
-    constraint_columns = ["age_band", "migration_group", "education_group"]
+    # Check that fitted marginals match constraints (including household_type)
+    constraint_columns = ["age_band", "migration_group", "education_group", "household_type"]
     for constraint_name, constraint_values in original_constraints.items():
         if constraint_name not in constraint_columns:
-            continue  # Skip household_type as it's not used in IPF
+            continue  # Skip any other constraints
 
         if constraint_name not in fitted_df.columns:
             validation_results["validation_passed"] = False
@@ -555,6 +659,15 @@ def main(args: argparse.Namespace) -> int:
         df_82275 = pd.read_parquet(reference_path_82275)
         print(f"  ✓ Loaded 82275NED education data: {len(df_82275)} rows, {len(df_82275.columns)} columns")
 
+        # Load household reference data for proper proportions
+        reference_path_37620 = args.seed_dir / "37620_preprocessed.parquet"
+        if reference_path_37620.exists():
+            df_37620 = pd.read_parquet(reference_path_37620)
+            print(f"  ✓ Loaded 37620 household data: {len(df_37620)} rows for national proportions")
+        else:
+            df_37620 = None
+            print(f"  ⚠ Household data not found, using approximate splits")
+
         # Find target buurt
         print(f"\n[2/6] Identifying target buurt: {args.buurt}")
         buurt_row = find_buurt_row(df_86165, args.buurt)
@@ -566,7 +679,7 @@ def main(args: argparse.Namespace) -> int:
 
         # Extract constraints
         print(f"\n[3/6] Extracting buurt constraints...")
-        constraints = extract_buurt_constraints(buurt_row)
+        constraints = extract_buurt_constraints(buurt_row, df_37620)
         print(f"  ✓ Extracted constraints for age, migration, and household")
 
         # Extract national education probabilities and apply to buurt

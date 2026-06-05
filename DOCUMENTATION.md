@@ -34,7 +34,7 @@ python src/IPF.py --buurt BU16800000 --seed_dir data/seed --reference_dir data/r
 ```
 - Loads national seed matrix
 - Extracts buurt-level constraints
-- Executes IPF with age, migration, and education constraints
+- Executes IPF with age, migration, education, and household constraints
 - Validates results and saves fitted data
 
 ### Phase 3: Microdata Instantiation (Future)
@@ -59,7 +59,6 @@ data/
 Original CBS datasets downloaded using the fetcher tools:
 - `37620.parquet` - Household composition data (national level)
 - `82275NED.parquet` - Education × migration data (national level)
-- `82309NED.parquet` - Education × employment data (national level)
 - `83931NED.parquet` - Age × income × migration data (national level)
 - `86165NED.parquet` - Buurt-level demographic data (local constraints)
 
@@ -69,13 +68,12 @@ Original CBS datasets downloaded using the fetcher tools:
 #### Preprocessed Tables
 - `37620_preprocessed.parquet` - Cleaned household composition data
 - `82275NED_preprocessed.parquet` - Cleaned education × migration data
-- `82309NED_preprocessed.parquet` - Cleaned education × employment data
 - `83931NED_preprocessed.parquet` - Cleaned age × income data
 - `86165NED_preprocessed.parquet` - Cleaned national anchor data
 
 #### Core Artifacts
 - `age_spine.parquet` - National age distribution (5 bins: 0-14, 15-24, 25-44, 45-64, 65+)
-- `seed_matrix.parquet` - National seed matrix (age × education × migration with weights)
+- `seed_matrix.parquet` - National seed matrix (age × education × migration × household with weights)
 - `preprocessing_metadata.json` - Complete metadata about preprocessing steps
 
 ### Phase 2: IPF Execution Artifacts
@@ -96,9 +94,9 @@ Original CBS datasets downloaded using the fetcher tools:
 - ✅ Data completeness: All required categories present
 
 ### Phase 2 Validation
-- ✅ Annen: 99.86% population match, all marginals within 1% tolerance
+- ✅ Annen: 100% population match, all marginals within 1% tolerance
 - ✅ Verspreide huizen Annen: 103.45% population match, all marginals within 1% tolerance
-- ✅ Constraint matching: Age, migration, and education constraints satisfied
+- ✅ Constraint matching: Age, migration, education, and household constraints satisfied
 - ✅ Non-negative weights: All fitted weights valid
 
 ## 🔧 Technical Implementation
@@ -111,7 +109,7 @@ Original CBS datasets downloaded using the fetcher tools:
 3. Harmonize age bins to 5 categories
 4. Build national age spine
 5. Force-scale joint tables to age spine
-6. Assemble Cartesian product seed matrix
+6. Assemble Cartesian product seed matrix (age × education × migration × household)
 7. Apply structural zeros (age-inappropriate combinations)
 8. Validate and save artifacts
 ```
@@ -159,7 +157,8 @@ The pipeline uses a Star Schema approach around the Age variable to avoid infini
 - **National Seed Matrix**: Reusable prior for all neighborhoods
 - **Conditional Probability Scaling**: Force-scaling to maintain consistency
 - **Structural Zeros**: Explicit handling of impossible combinations
-- **Multi-level Constraints**: Age, migration, and education constraints working together
+- **Multi-level Constraints**: Age, migration, education, and household constraints working together
+- **Household Composition Modeling**: Realistic household type distributions using national proportions
 
 ## 🔗 Key Relationships
 - **Seed Matrix** → **IPF Input**: The national seed matrix provides the starting point for all buurt-level IPF runs

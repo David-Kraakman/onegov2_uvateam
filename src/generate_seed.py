@@ -139,17 +139,6 @@ EDUCATION_MAPPINGS = {
     "Universiteit": "Tertiary_University",
 }
 
-# Employment status normalization
-EMPLOYMENT_MAPPINGS = {
-    "Totaal": "Total",
-    "Werkzame beroepsbevolking": "Employed",
-    "Werkloze beroepsbevolking": "Unemployed",
-    "Niet-beroepsbevolking": "Not_in_labor_force",
-    "Beroepsbevolking": "In_labor_force",
-    "Werknemer": "Employee",
-    "Zelfstandige": "Self_employed",
-}
-
 # Household composition normalization
 HOUSEHOLD_MAPPINGS = {
     "Totaal personen in huishoudens": "Total",
@@ -378,41 +367,6 @@ def load_and_preprocess_82275ned(path: Path) -> pd.DataFrame:
     return df
 
 
-def load_and_preprocess_82309ned(path: Path) -> pd.DataFrame:
-    """Load and preprocess the labor participation table (82309NED)."""
-    df = pd.read_parquet(path)
-    
-    # Filter for total sexes and latest year (2022)
-    df = df[df["Geslacht"] == "Totaal mannen en vrouwen"].copy()
-    df = df[df["Perioden"] == "2022 1e kwartaal"].copy() if "2022 1e kwartaal" in df["Perioden"].values else df[df["Perioden"].astype(str).str.startswith("2022")].copy()
-    
-    # Select columns
-    relevant = {
-        "Leeftijd": "age_label",
-        "HoogstBehaaldOnderwijsniveau": "education_raw",
-        "WerkzameBeroepsbevolking_3": "employed",
-        "WerklozeBeroepsbevolking_20": "unemployed",
-        "NietBeroepsbevolking_22": "not_in_labor",
-        "BrutoArbeidsparticipatie_23": "gross_participation",
-        "NettoArbeidsparticipatie_24": "net_participation",
-    }
-    
-    available = [col for col in relevant.keys() if col in df.columns]
-    df = df[available].rename(columns={col: relevant[col] for col in available})
-    
-    # Normalize age
-    df["age_band"] = df["age_label"].apply(_normalize_age)
-    df = df[df["age_band"].notna()]
-    
-    # Normalize education
-    df["education_group"] = df["education_raw"].map(EDUCATION_MAPPINGS)
-    df = df[df["education_group"].notna()]
-    
-    # For now, keep gross participation as the employment indicator
-    df["total"] = pd.to_numeric(df["gross_participation"], errors="coerce")
-    df = df[["age_band", "education_group", "total"]].dropna(subset=["total"])
-    
-    return df
 
 
 def main() -> None:
@@ -467,12 +421,6 @@ def main() -> None:
     print(f"  → Unique education groups: {df_82275['education_group'].unique()}")
     print(f"  → Unique migration groups: {df_82275['migration_group'].unique()}\n")
 
-    print("[5/5] Loading and preprocessing 82309NED (labor participation)...")
-    df_82309 = load_and_preprocess_82309ned(reference_dir / "82309NED.parquet")
-    print(f"  → {len(df_82309)} rows, columns: {', '.join(df_82309.columns)}")
-    print(f"  → Unique age bands: {df_82309['age_band'].unique()}")
-    print(f"  → Unique education groups: {df_82309['education_group'].unique()}\n")
-
     # Summary
     print("=" * 80)
     print("Preprocessing Summary")
@@ -481,7 +429,6 @@ def main() -> None:
     print(f"83931NED:   {len(df_83931)} age×income rows")
     print(f"37620:      {len(df_37620)} age×household rows")
     print(f"82275NED:   {len(df_82275)} age×education×migration rows")
-    print(f"82309NED:   {len(df_82309)} age×education×employment rows")
     print()
 
     # Save preprocessed tables for inspection
@@ -513,12 +460,6 @@ def main() -> None:
                 "shape": df_82275.shape,
                 "source": "Education (age × education × migration)",
             },
-            "82309NED": {
-                "rows": len(df_82309),
-                "columns": list(df_82309.columns),
-                "shape": df_82309.shape,
-                "source": "Labor participation (age × education × employment)",
-            },
         },
     }
 
@@ -532,7 +473,6 @@ def main() -> None:
         ("83931NED_preprocessed", df_83931),
         ("37620_preprocessed", df_37620),
         ("82275NED_preprocessed", df_82275),
-        ("82309NED_preprocessed", df_82309),
     ]:
         outpath = out_dir / f"{name}.parquet"
         df.to_parquet(outpath, index=False)
@@ -600,46 +540,59 @@ def main() -> None:
     df_82275_scaled = df_82275_scaled[["age_band", "migration_group", "education_group", "conditional_prob"]]
     print(f"  → 82275NED: conditional probabilities computed for {len(df_82275_scaled)} rows")
     
-    # 82309NED: age × education (employment via gross_participation)
-    df_82309_scaled = df_82309.copy()
-    df_82309_scaled = df_82309_scaled.groupby("age_band")["total"].transform(
-        lambda x: x / x.sum() if x.sum() > 0 else x
-    ).to_frame()
-    df_82309_scaled["age_band"] = df_82309["age_band"].values
-    df_82309_scaled["education_group"] = df_82309["education_group"].values
-    df_82309_scaled.columns = ["conditional_prob", "age_band", "education_group"]
-    df_82309_scaled = df_82309_scaled[["age_band", "education_group", "conditional_prob"]]
-    print(f"  → 82309NED: conditional probabilities computed for {len(df_82309_scaled)} rows\n")
 
     # ========== STEP 8: Assemble Cartesian product with Naive Bayes weights ==========
     print("[8/10] Assembling Cartesian product seed matrix...")
-    
-    # For phase 1, create a simplified seed focused on age × education × migration
-    # (the main IPF target dimensions). Income and household can be included later.
-    
+
     # Scale age spine to population level
     total_pop = age_spine_df["count"].sum()
-    
+
     # Start with education × migration data and scale to age margins
     seed = df_82275.copy()
     seed = seed[["age_band", "education_group", "migration_group", "total"]].copy()
-    
+
     # Normalize to conditional probabilities given age
     seed["conditional"] = seed.groupby("age_band")["total"].transform(
         lambda x: x / x.sum() if x.sum() > 0 else 0
     )
-    
+
     # Merge with age spine to scale to population
     seed = seed.merge(age_spine_df[["age_band", "count"]], on="age_band", how="left")
     seed["weight"] = seed["conditional"] * seed["count"]
-    
+
+    # Now incorporate household data using Naive Bayes approach
+    # First, create a Cartesian product with household types
+    household_types = df_37620['household_type'].unique()
+    seed_expanded = seed.merge(
+        pd.DataFrame({'household_type': household_types}),
+        how='cross'
+    )
+
+    # Merge with household data to get household totals by age
+    household_totals = df_37620.groupby(['age_band', 'household_type'])['total'].sum().reset_index()
+    household_totals = household_totals.rename(columns={'total': 'hh_total'})
+
+    seed_expanded = seed_expanded.merge(
+        household_totals,
+        on=['age_band', 'household_type'],
+        how='left'
+    )
+
+    # Normalize household totals by age band
+    seed_expanded["household_conditional"] = seed_expanded.groupby("age_band")["hh_total"].transform(
+        lambda x: x / x.sum() if x.sum() > 0 else 0
+    )
+
+    # Combine weights using Naive Bayes: P(age) * P(edu,mig|age) * P(hh|age)
+    seed_expanded["weight"] = seed_expanded["weight"] * seed_expanded["household_conditional"]
+
     # Select final columns
-    seed = seed[["age_band", "education_group", "migration_group", "weight"]].copy()
-    
-    # Fill missing age bands with zero weight
+    seed = seed_expanded[["age_band", "education_group", "migration_group", "household_type", "weight"]].copy()
+
+    # Fill missing combinations with zero weight
     seed = seed.fillna(0)
-    
-    print(f"  → Assembled {len(seed)} rows (age × education × migration)")
+
+    print(f"  → Assembled {len(seed)} rows (age × education × migration × household)")
     print(f"  → Seed total: {seed['weight'].sum():,.0f}\n")
 
     # ========== STEP 9: Apply structural zeros ==========
@@ -655,7 +608,6 @@ def main() -> None:
     print(f"  → Removed {before_zeros - after_zeros} rows (0-14 with tertiary education)")
     
     # Remove age 0-14 with employment participation
-    # (Note: 82309NED starts at 15, so this is redundant but explicit)
     seed = seed[~((seed["age_band"] == "0-14") & (seed.get("employment_status") == "Employed"))]
     print(f"  → Structural zero rules applied; {len(seed)} rows remain\n")
 
@@ -663,7 +615,7 @@ def main() -> None:
     print("[10/10] Validating seed matrix...")
     
     # Check dimensionality
-    required_cols = ["age_band", "income_class", "household_type", "education_group", "migration_group", "weight"]
+    required_cols = ["age_band", "education_group", "migration_group", "household_type", "weight"]
     missing_cols = set(required_cols) - set(seed.columns)
     if missing_cols:
         print(f"  ✗ Missing columns: {missing_cols}")
