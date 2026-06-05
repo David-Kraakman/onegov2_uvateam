@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
+from itertools import combinations
 import networkx as nx
 import random
 import math
@@ -13,9 +14,15 @@ households_kids_target = 10000
 target_size = 2.5
 
 
+class HouseholdType(Enum):
+    SINGLE = 0
+    TOGETHER = 1
+    KIDS = 2
+    PROBLEM = 3
+
+
 @dataclass
 class HouseholdData:
-    households: int
     single: int
     together: int
     kids: int
@@ -29,7 +36,6 @@ class HouseholdData:
             self.together,
             self.kids,
             self.problem_nodes,
-            self.size_diff,
         )
 
     def set(self, other):
@@ -38,26 +44,24 @@ class HouseholdData:
         self.together = other.together
         self.kids = other.kids
         self.problem_nodes = other.problem_nodes
-        self.size_diff = other.size_diff
 
 
-class HouseholdType(Enum):
-    SINGLE = 0
-    TOGETHER = 1
-    KIDS = 2
-    PROBLEM = 3
+@dataclass
+class Person:
+    household_type: HouseholdType
+    age: int
 
 
-def classify_household(g: nx.Graph, island) -> HouseholdType:
+def classify_household(household: dict[int, Person]) -> HouseholdType:
     # Extract ages of all members in this island
     ages = []
-    for node_id in island:
-        ages.append(g.nodes[node_id]["age"])
+    for person in household.values():
+        ages.append(person.age)
 
     # Count adults and children
     adults_25_plus = sum(1 for age in ages if age >= 25)
     adults_15_plus = sum(1 for age in ages if age >= 15)
-    children = sum(1 for age in ages if age < 15)
+    children = len(ages) - adults_15_plus
 
     # Categorize household
     if adults_25_plus > 0 and children > 0:
@@ -74,10 +78,10 @@ def classify_household(g: nx.Graph, island) -> HouseholdType:
         return HouseholdType.PROBLEM
 
 
-def remove_household(g: nx.Graph, island, data: HouseholdData):
-    data.households -= 1
-    household_type = classify_household(g, island)
-    data.size_diff -= abs(target_size - len(island)) ** 2
+def remove_household(household: dict[int, Person], data: HouseholdData):
+    household_type = classify_household(household)
+    household_size = len(household)
+    data.size_diff -= abs(target_size - household_size)
     # Categorize household
     match household_type:
         case HouseholdType.SINGLE:
@@ -88,14 +92,14 @@ def remove_household(g: nx.Graph, island, data: HouseholdData):
             data.kids -= 1
         case HouseholdType.PROBLEM:
             # Problem nodes: doesn't fit any category
-            data.problem_nodes -= len(island)
+            data.problem_nodes -= household_size
             data.households += 1
 
 
-def add_household(g: nx.Graph, island, data: HouseholdData):
-    data.households += 1
-    household_type = classify_household(g, island)
-    data.size_diff += abs(target_size - len(island)) ** 2
+def add_household(household: dict[int, Person], data: HouseholdData):
+    household_type = classify_household(household)
+    household_size = len(household)
+    data.size_diff += abs(target_size - household_size)
     # Categorize household
     match household_type:
         case HouseholdType.SINGLE:
@@ -107,7 +111,7 @@ def add_household(g: nx.Graph, island, data: HouseholdData):
         case HouseholdType.PROBLEM:
             data.households -= 1
             # Problem nodes: doesn't fit any category
-            data.problem_nodes += len(island)
+            data.problem_nodes += household_size
 
 
 def iterate_islands(g: nx.Graph):
@@ -125,38 +129,17 @@ def iterate_islands(g: nx.Graph):
         yield island
 
 
-def count_households(g: nx.Graph) -> HouseholdData:
-    """
-    Count and categorize households based on their composition.
-
-    Categories:
-    - single: One adult (age 15+) living alone
-    - together: Multiple adults (age 25+) without children
-    - kids: Adults (age 25+) with at least one child (age 0-17)
-    - problem_nodes: Households that don't fit the above categories
-
-    Args:
-        g: NetworkX graph where nodes represent household members
-
-    Returns:
-        HouseholdData: Aggregated household statistics and problem nodes
-    """
-    data = HouseholdData(
-        households=0, single=0, together=0, kids=0, problem_nodes=0, size_diff=0
-    )
-
-    for island in iterate_islands(g):
-        # Get all nodes in this household island
-        add_household(g, island, data)
-
+def count_households(households: list[dict[int, Person]]) -> HouseholdData:
+    data = HouseholdData(0, 0, 0, 0, 0)
+    for household in households:
+        print(household)
+        add_household(household, data)
     return data
 
 
 def calculate_energy(household_data: HouseholdData) -> float:
     """
     Calculate energy as the sum of squared differences from target values.
-
-    Energy = (single_diff)^2 + (together_diff)^2 + (kids_diff)^2 + (problem_nodes)^2
 
     Args:
         household_data: Current household distribution
@@ -168,14 +151,12 @@ def calculate_energy(household_data: HouseholdData) -> float:
     together_diff = abs(household_data.together - households_together_target) ** 2
     kids_diff = abs(household_data.kids - households_kids_target) ** 2
     problem_diff = household_data.problem_nodes**2
-    households_diff = abs(household_data.households - households_target) ** 2
 
     energy = (
         single_diff
         + together_diff
         + kids_diff
         + problem_diff
-        + households_diff
         + household_data.size_diff * 2
     )
     return energy
@@ -208,41 +189,172 @@ def metropolis_criterion(
     return random.random() < probability
 
 
-def change_edge(g: nx.Graph, data: HouseholdData, temperature: float):
-    nodes = list(g.nodes())
-    node1, node2 = random.sample(nodes, 2)
-    while node1 == node2:
-        node1, node2 = random.sample(nodes, 2)
+def sample_nodes(
+    households: list[dict[int, Person]],
+    household_index: dict[int, int],
+    node_ids: list[int],
+    single: list[int],
+    together: list[int],
+    kids: list[int],
+) -> tuple[int, int]:
+    node1_index = random.randint(0, len(node_ids) - 1)
+    node1 = node_ids[node1_index]
+    person1 = households[household_index[node1]][node1]
+    node2_samples = None
+    match person1.household_type:
+        case HouseholdType.SINGLE:
+            node2_samples = single
+        case HouseholdType.TOGETHER:
+            node2_samples = together
+        case HouseholdType.KIDS:
+            node2_samples = kids
+        case _:
+            e = f"Invalid householdtype for person {node1}"
+            raise Exception(e)
+    node2_index = random.randint(0, len(node2_samples) - 1)
+    node2 = node_ids[node2_index]
+    return node1, node2
 
-    old_data = data.copy()
-    node1_connected = nx.node_connected_component(g, node1)
-    if node2 in node1_connected:
-        remove_household(g, node1_connected, data)
-        for node in node1_connected:
-            if node == node1:
-                continue
-            g.remove_edge(node1, node)
-        add_household(g, {node1}, data)
-        add_household(g, node1_connected - {node1}, data)
-        if not metropolis_criterion(data, old_data, temperature):
-            for node in node1_connected:
-                if node == node1:
-                    continue
-                g.add_edge(node1, node)
-            data.set(old_data)
+
+def node_disconnect(
+    households: list[dict[int, Person]],
+    household: dict[int, Person],
+    household_index: dict[int, int],
+    node: int,
+) -> dict[int, Person]:
+    person = household.pop(node)
+    household_index[node] = len(households)
+    new_household = {node: person}
+    households.append(new_household)
+    return new_household
+
+
+def household_connect(
+    households: list[dict[int, Person]],
+    household_index: dict[int, int],
+    household1: dict[int, Person],
+    household2: dict[int, Person],
+):
+    for id in household1.keys():
+        household1_num = household_index[id]
+        break
+    first = True
+    for id, person in household2.items():
+        if first:
+            household2_num = household_index[id]
+        household_index[id] = household1_num
+        household1[id] = person
+
+    replcmnt = households.pop()
+    if household2_num != len(households):
+        # Household2 wasnt the replacement
+        households[household2_num] = replcmnt
+
+
+def household_reset(
+    households: list[dict[int, Person]],
+    household_index: dict[int, int],
+    new_household: dict[int, Person],
+    prev_household: dict[int, Person],
+):
+    households.append(prev_household)
+    household_count = len(households)
+    for id in prev_household.keys():
+        new_household.pop(id)
+        household_index[id] = household_count - 1
+
+
+def change_household(
+    node_ids,
+    households: list[dict[int, Person]],
+    household_index: dict[int, int],
+    single,
+    together,
+    kids,
+    data: HouseholdData,
+    temperature: float,
+):
+    node1, node2 = sample_nodes(
+        households, household_index, node_ids, single, together, kids
+    )
+
+    new_data = data.copy()
+    node1_household = households[household_index[node1]]
+    if node2 in node1_household:
+        remove_household(node1_household, new_data)
+        node2_household = node1_household
+        node1_household = node_disconnect(
+            households, node1_household, household_index, node1
+        )
+        add_household(node1_household, new_data)
+        add_household(node2_household, new_data)
+        if metropolis_criterion(new_data, data, temperature):
+            data.set(new_data)
+        else:
+            household_connect(
+                households, household_index, node2_household, node1_household
+            )
     else:
-        node2_connected = nx.node_connected_component(g, node2)
-        remove_household(g, node1_connected, data)
-        remove_household(g, node2_connected, data)
-        for node_first in node1_connected:
-            for node_second in node2_connected:
-                g.add_edge(node_first, node_second)
-        add_household(g, node1_connected | node2_connected, data)
-        if not metropolis_criterion(data, old_data, temperature):
-            for node_first in node1_connected:
-                for node_second in node2_connected:
-                    g.remove_edge(node_first, node_second)
-            data.set(old_data)
+        node2_household = households[household_index[node2]]
+        remove_household(node1_household, new_data)
+        remove_household(node2_household, new_data)
+        household_connect(households, household_index, node1_household, node2_household)
+        add_household(node1_household, data)
+        if metropolis_criterion(new_data, data, temperature):
+            data.set(new_data)
+        else:
+            household_reset(
+                households, household_index, node1_household, node2_household
+            )
+
+
+def infer_households(g: nx.Graph) -> tuple[list[dict[int, Person]], dict[int, int]]:
+    households = []
+    household_index = {}
+
+    for i, island in enumerate(iterate_islands(g)):
+        # Get all nodes in this household island
+        # TODO: Householdtype may mismatch with generated data
+        households.append(
+            {
+                node_id: Person(node["household_type"], node["age"])
+                for node_id, node in zip(island, nx.subgraph(g, island))
+            }
+        )
+        for node_id in island:
+            household_index[node_id] = i
+
+    return households, household_index
+
+
+def distinguish_households(households: list[dict[int, Person]]):
+    single = list()
+    together = list()
+    kids = list()
+    for household in households:
+        for id, person in household.items():
+            match person.household_type:
+                case HouseholdType.KIDS:
+                    kids.append(id)
+                case HouseholdType.TOGETHER:
+                    together.append(id)
+                case HouseholdType.SINGLE:
+                    single.append(id)
+
+    return single, together, kids
+
+
+def apply_edge(g: nx.Graph, households: list[dict[int, Person]]):
+    """
+    Creates fully connected islands for each household.
+
+    Args:
+        g: NetworkX graph
+        households: A list of sets, each set representing one fully connected household.
+    """
+    for household in households:
+        for node1, node2 in combinations(household.keys(), 2):
+            g.add_edge(node1, node2)
 
 
 def link_neighborhood(g: nx.Graph):
@@ -262,20 +374,29 @@ def link_neighborhood(g: nx.Graph):
     min_temperature = 1e-8
     iterations_per_temp = 100
 
-    # Get initial state
-    data = count_households(g)
-    global current_energy
-    current_energy = calculate_energy(data)
-
     temperature = initial_temperature
 
     iteration = 0
+
+    node_ids = list(g.nodes)
+    households, household_index = infer_households(g)
+    data = count_households(households)
+    single, together, kids = distinguish_households(households)
 
     # Simulated annealing loop
     while temperature > min_temperature:
         for _ in range(iterations_per_temp):
             # Generate neighbor solution
-            change_edge(g, data, temperature)
+            change_household(
+                node_ids,
+                households,
+                household_index,
+                single,
+                together,
+                kids,
+                data,
+                temperature,
+            )
 
             iteration += 1
 
@@ -283,9 +404,8 @@ def link_neighborhood(g: nx.Graph):
         temperature *= cooling_rate
 
         print(
-            f"Iteration {iteration}, T={temperature:.4f}, Energy={current_energy:.2f}"
+            f"Iteration {iteration}, T={temperature:.4f}, Energy={calculate_energy(data):.2f}"
         )
         print(
             f"  Total: {data.households}, Single: {data.single}, Together: {data.together}, Kids: {data.kids}, Problem:{data.problem_nodes}"
         )
-        current_energy = calculate_energy(data)

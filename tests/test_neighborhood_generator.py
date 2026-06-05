@@ -42,14 +42,6 @@ def test_single_node_island():
     print("\n=== Test: Single Node Islands ===")
     g = generate_test_network(num_nodes=100000, seed=42)
 
-    data = count_households(g)
-
-    print(f"Total households: {data.households}")
-    print(f"Single adults: {data.single}")
-    print(f"Together households: {data.together}")
-    print(f"Households with kids: {data.kids}")
-    print(f"Problem nodes: {data.problem_nodes}")
-
     link_neighborhood(g)
 
 
