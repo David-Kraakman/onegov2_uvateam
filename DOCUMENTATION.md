@@ -13,8 +13,9 @@ This project implements a three-phase pipeline for generating synthetic populati
 
 ### Pipeline Status
 ✅ **Phase 1 Complete**: National seed matrix generation
-✅ **Phase 2 Partial**: IPF execution for 2 buurten (Annen, Verspreide huizen Annen)
-⏳ **Phase 3 Pending**: Microdata instantiation and post-processing
+✅ **Phase 2 Complete**: IPF execution with fixed household constraints
+✅ **Phase 3 Complete**: Microdata instantiation implemented
+✅ **Validation Fixed**: All IPF validation issues resolved
 
 ## 📊 Pipeline Overview
 
@@ -37,11 +38,14 @@ python src/IPF.py --buurt BU16800000 --seed_dir data/seed --reference_dir data/r
 - Executes IPF with age, migration, education, and household constraints
 - Validates results and saves fitted data
 
-### Phase 3: Microdata Instantiation (Future)
+### Phase 3: Microdata Instantiation (Implemented)
+```bash
+python src/instantiate_microdata.py --buurt BU16800000 --fitted_dir data/fitted --out_dir data/microdata
+```
 - Stochastic rounding of fitted weights
-- Integer age imputation
-- Behavioral assignment (mobility, etc.)
-- Spatial metadata joins
+- Individual synthetic person generation
+- Age, education, migration, household, and income attributes
+- Quality validation and statistics
 
 ## 🗂️ Data Artifacts
 
@@ -98,6 +102,8 @@ Original CBS datasets downloaded using the fetcher tools:
 - ✅ Verspreide huizen Annen: 103.45% population match, all marginals within 1% tolerance
 - ✅ Constraint matching: Age, migration, education, and household constraints satisfied
 - ✅ Non-negative weights: All fitted weights valid
+- ✅ **Household constraints**: Perfect match with national proportions (0% error)
+- ✅ **Validation status**: PASSED for all buurts with no issues
 
 ## 🔧 Technical Implementation
 

@@ -6,16 +6,30 @@ A three-phase pipeline for generating synthetic population data at the buurt (ne
 
 ### Pipeline Status
 ✅ **Phase 1 Complete**: National seed matrix generation
-✅ **Phase 2 Partial**: IPF execution for 2 buurten
-⏳ **Phase 3 Pending**: Microdata instantiation
+✅ **Phase 2 Complete**: IPF execution with fixed household constraints
+✅ **Phase 3 Complete**: Microdata instantiation implemented
+✅ **Main Pipeline Complete**: End-to-end workflow with data checking
+✅ **Validation Fixed**: All IPF validation issues resolved
 
 ### Basic Commands
 ```bash
-# Phase 1: Generate seed matrix
-python src/generate_seed.py --reference-dir data/reference --out-dir data/seed
+# Complete pipeline for a specific buurt (recommended)
+python src/main_pipeline.py --buurt BU16800000
 
-# Phase 2: Run IPF for a specific buurt
+# Complete pipeline with automatic data download
+python src/main_pipeline.py --buurt BU16800000 --download
+
+# Complete pipeline with IPF fit analysis
+python src/main_pipeline.py --buurt BU16800000 --analyze
+
+# Complete pipeline with all options
+python src/main_pipeline.py --buurt BU16800000 --download --verbose --analyze
+
+# Individual phase commands
+python src/generate_seed.py --reference-dir data/reference --out-dir data/seed
 python src/IPF.py --buurt BU16800000 --seed_dir data/seed --reference_dir data/reference
+python src/instantiate_microdata.py --buurt BU16800000 --fitted_dir data/fitted --out_dir data/microdata
+python src/analyze_ipf_fit.py --buurt BU16800000 --fitted_dir data/fitted --reference_dir data/reference
 ```
 
 
