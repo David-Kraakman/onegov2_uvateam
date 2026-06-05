@@ -19,9 +19,15 @@ export function SimulationRun({
 }) {
   const [selectedSeries, setSelectedSeries] = React.useState<SeriesKey>('infectious');
 
-  const points = runNetworkSeir(network, config, dataFactors);
-  const stats = getNetworkStats(network);
-  const factorMultiplier = calculateFactorMultiplier(network, dataFactors);
+  const points = React.useMemo(
+    () => runNetworkSeir(network, config, dataFactors),
+    [network, config, dataFactors]
+  );
+  const stats = React.useMemo(() => getNetworkStats(network), [network]);
+  const factorMultiplier = React.useMemo(
+    () => calculateFactorMultiplier(network, dataFactors),
+    [network, dataFactors]
+  );
   const hasProfiles = Boolean(network && network.nodes.some((node) => node.profile));
   
   const selectedSeriesInfo = {
