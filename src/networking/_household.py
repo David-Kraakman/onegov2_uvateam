@@ -52,6 +52,7 @@ class HouseholdData:
     together: int
     kids: int
     problem_nodes: int
+    size_diff: float
 
     def copy(self):
         return HouseholdData(
@@ -59,6 +60,7 @@ class HouseholdData:
             together=self.together,
             kids=self.kids,
             problem_nodes=self.problem_nodes,
+            size_diff=self.size_diff,
         )
 
     def set(self, other):
@@ -66,6 +68,7 @@ class HouseholdData:
         self.together = other.together
         self.kids = other.kids
         self.problem_nodes = other.problem_nodes
+        self.size_diff = other.size_diff
 
 
 @dataclass
@@ -108,8 +111,8 @@ def classify_household(household: dict[int, Person]) -> HouseholdType:
         if kids == 0 or ((total - other - kids) < 2):
             return HouseholdType.PROBLEM
         return HouseholdType.KIDS
-    elif person_type == PersonType.SINGLE:
-        if (total - kids - other) > 1:
+    elif person_type == PersonType.SINGLE_KID:
+        if kids == 0 or (total - kids - other) > 1:
             return HouseholdType.PROBLEM
         return HouseholdType.KIDS
     elif kids > 0:
@@ -125,6 +128,7 @@ def remove_household(household: dict[int, Person], data: HouseholdData):
     household_size = len(household)
     global total
     total -= household_size
+    data.size_diff -= (household_size - target_size) ** 2
     # Categorize household
     match household_type:
         case HouseholdType.SINGLE:
@@ -143,6 +147,7 @@ def add_household(household: dict[int, Person], data: HouseholdData):
     household_size = len(household)
     global total
     total += household_size
+    data.size_diff += (household_size - target_size) ** 2
     # Categorize household
     match household_type:
         case HouseholdType.SINGLE:
@@ -183,10 +188,12 @@ def calculate_energy(household_data: HouseholdData) -> float:
     """
     single_diff = abs(household_data.single - households_single_target) ** 2
     together_diff = abs(household_data.together - households_together_target) ** 2
-    kids_diff = abs(1.5 * household_data.kids - households_kids_target) ** 2
+    kids_diff = abs(household_data.kids - households_kids_target) ** 2
     problem_diff = (household_data.problem_nodes) ** 2
+    size_diff = household_data.size_diff
+    print(size_diff)
 
-    energy = single_diff + together_diff + kids_diff + problem_diff
+    energy = single_diff + together_diff + kids_diff + problem_diff + size_diff
     return energy
 
 
@@ -498,7 +505,7 @@ def apply_edge(g: nx.Graph, households: list[dict[int, Person]]):
 
 
 def count_households(households: list[dict[int, Person]]) -> HouseholdData:
-    data = HouseholdData(0, 0, 0, 0)
+    data = HouseholdData(0, 0, 0, 0, 0)
     for household in households:
         add_household(household, data)
     return data
@@ -556,9 +563,9 @@ def link_household(
 
             iteration += 1
         new_energy = calculate_energy(data)
-        if optimization and (new_energy >= energy):
-            optimization = False
-            temperature = np.log(new_energy)
+        # if optimization and (new_energy >= energy):
+        #     optimization = False
+        #     temperature = np.log(new_energy)
 
         # Cool down
         temperature *= cooling_rate
