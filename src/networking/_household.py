@@ -394,21 +394,26 @@ def map_person_types(living_situation: str) -> PersonType:
     Raises:
         ValueError: If the living situation string is not recognized
     """
+    # Mapping for English household types from microdata
     living_situation_map = {
         # Child living at home
         "ThuiswonendKind": PersonType.KID,
-        # Unmarried couples
-        "PartnerInNietGehuwdPaarZonderKinderen": PersonType.TOGETHER,
-        "PartnerInNietGehuwdPaarMetKinderen": PersonType.TOGETHER_KID,
-        # Married couples
-        "PartnerInGehuwdPaarZonderKinderen": PersonType.MARRIED,
-        "PartnerInGehuwdPaarMetKinderen": PersonType.MARRIED_KID,
-        # Single parent household
-        "OuderInEenouderhuishouden": PersonType.SINGLE_KID,
         # Single person
-        "Alleenstaand": PersonType.SINGLE,
-        # Other household member
-        "OverigLidHuishouden": PersonType.OTHER,
+        "Single": PersonType.SINGLE,
+        # Single parent with kids
+        "Single_parent": PersonType.SINGLE_KID,
+        # Married couples without kids
+        "Married_no_kids": PersonType.MARRIED,
+        # Married couples with kids
+        "Married_with_kids": PersonType.MARRIED_KID,
+        # Cohabiting couples without kids
+        "Cohabiting_no_kids": PersonType.TOGETHER,
+        # Cohabiting couples with kids
+        "Cohabiting_with_kids": PersonType.TOGETHER_KID,
+        # Living with parents (consider as kid)
+        "Living_with_parents": PersonType.KID,
+        # Cohabiting (general, assume without kids)
+        "Cohabiting": PersonType.TOGETHER,
     }
 
     if living_situation not in living_situation_map:
@@ -426,12 +431,12 @@ def infer_households(g: nx.Graph) -> tuple[list[dict[int, Person]], dict[int, in
 
     for i, island in enumerate(iterate_islands(g)):
         # Get all nodes in this household island
-        # TODO: living situation may mismatch with generated data
+        # Use household_type from microdata instead of living_situation
         subgraph = nx.subgraph(g, island)
         households.append(
             {
                 node_id: Person(
-                    map_person_types(subgraph.nodes[node_id]["living_situation"]),
+                    map_person_types(subgraph.nodes[node_id]["household_type"]),
                 )
                 for node_id in island
             }
@@ -559,10 +564,4 @@ def link_household(
         temperature *= cooling_rate
         energy = new_energy
 
-        print(f"Iteration {iteration}, T={temperature:.4f}, Energy={energy:.2f}")
-        print(
-            f"  Single: {data.single}, Together: {data.together}, Kids: {data.kids}, Problem:{data.problem_nodes}"
-        )
-        print(total)
-        print(len(households))
     apply_edge(g, households)
