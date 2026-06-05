@@ -3,7 +3,7 @@ import type { Page } from '../types';
 export const videoUrl = 'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260403_050628_c4e32401-fab4-4a27-b7a8-6e9291cd5959.mp4';
 export const repoUrl = 'https://github.com/David-Kraakman/onegov2_uvateam';
 
-export const navigationPages: Page[] = ['Pipeline overzicht', 'Netwerk genereren', 'Simulatie'];
+export const navigationPages: Page[] = ['Netwerk genereren', 'Simulatie'];
 
 export const factorLabels = [
   'Bevolkingsomvang per buurt [Demografie / Epidemiologie] (86165NED)',

@@ -2,7 +2,6 @@ import React from 'react';
 import { BackgroundVideo } from './components/BackgroundVideo';
 import { Navbar } from './components/Navbar';
 import { NetworkGeneration } from './pages/NetworkGeneration';
-import { PipelineOverview } from './pages/PipelineOverview';
 import { SimulationConfiguration } from './pages/SimulationConfiguration';
 import { SimulationRun } from './pages/SimulationRun';
 import { factorLabels } from './constants/appConstants';
@@ -56,7 +55,6 @@ export function App() {
       <div className="relative z-10 flex h-screen min-h-0 flex-col px-6 pt-6 md:px-12 lg:px-16">
         <Navbar activePage={activePage} onPageChange={goToPage} />
         <section className={`flex min-h-0 flex-1 transition-all duration-500 ${loaded ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'}`}>
-          {activePage === 'Pipeline overzicht' && <PipelineOverview />}
           {activePage === 'Netwerk genereren' && (
             <NetworkGeneration 
               network={network} 
