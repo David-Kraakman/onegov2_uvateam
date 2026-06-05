@@ -112,6 +112,11 @@ MIGRATION_MAPPINGS = {
 }
 
 # Education level normalization
+# Based on the Dutch education system:
+# - Primary: Basisonderwijs (ages 4-12)
+# - Secondary: VMBO, HAVO, VWO (ages 12-18)
+# - Secondary Vocational: MBO (ages 16+)
+# - Tertiary: HBO (Universities of Applied Sciences), WO (Research Universities)
 EDUCATION_MAPPINGS = {
     "Totaal": None,
     "Weet niet of onbekend": None,
@@ -123,18 +128,18 @@ EDUCATION_MAPPINGS = {
     "122 Vmbo-g/t, havo-, vwo-onderbouw": "Secondary_HAVO_VWO",
     "2 Middelbaar onderwijsniveau": "Secondary_MBO",
     "21 Havo, vwo, mbo2-4": "Secondary_MBO",
-    "211 Mbo2 en mbo3": "Tertiary_MBO",
-    "212 Mbo4": "Tertiary_MBO",
-    "213 Havo, vwo": "Secondary_HAVO_VWO",
+    "211 Mbo2 en mbo3": "Secondary_MBO",  # MBO is secondary vocational education
+    "212 Mbo4": "Secondary_MBO",  # MBO is secondary vocational education
+    "213 Havo, vwo": "Secondary_HAVO_VWO",  # HAVO and VWO are secondary education
     "3 Hoog onderwijsniveau": "Tertiary_Higher",
-    "31 Hbo-, wo-bachelor": "Tertiary_Higher",
-    "311 Hbo-, wo-bachelor": "Tertiary_Higher",
-    "32 Hbo-, wo-master, doctor": "Tertiary_University",
-    "321 Hbo-, wo-master, doctor": "Tertiary_University",
+    "31 Hbo-, wo-bachelor": "Tertiary_Higher",  # HBO bachelor
+    "311 Hbo-, wo-bachelor": "Tertiary_Higher",  # HBO bachelor
+    "32 Hbo-, wo-master, doctor": "Tertiary_University",  # WO master/doctor
+    "321 Hbo-, wo-master, doctor": "Tertiary_University",  # WO master/doctor
     "Basisonderwijs of geen onderwijs": "Primary_or_None",
     "Vmbo, Mavo, etc.": "Secondary_VMBO",
     "Havo, Vwo": "Secondary_HAVO_VWO",
-    "Mbo": "Tertiary_MBO",
+    "Mbo": "Secondary_MBO",  # MBO is secondary vocational education
     "Hoger onderwijs": "Tertiary_Higher",
     "Universiteit": "Tertiary_University",
 }
@@ -224,37 +229,44 @@ def load_and_preprocess_86165ned(path: Path) -> pd.DataFrame:
 def load_and_preprocess_83931ned(path: Path) -> pd.DataFrame:
     """Load and preprocess the income table (83931NED)."""
     df = pd.read_parquet(path)
-    
+
     # 83931NED is national level; filter for total sexes and latest year
     df = df[df["Geslacht"] == "Totaal mannen en vrouwen"].copy()
-    
+
     # Filter for latest year (2024)
     df = df[df["Perioden"] == "2024"].copy()
-    
+
     # Filter for rows with age in KenmerkenVanPersonen
     df = df[df["KenmerkenVanPersonen"].astype(str).str.contains("Leeftijd:", case=False, na=False)].copy()
-    
+
     # Filter for non-total income classes (exclude 'Totaal')
     df = df[df["Inkomensklassen"] != "Totaal"].copy()
-    
+
+    # Filter for bracket-based income classes only (exclude percentile groups)
+    # Keep only income classes that contain "tot" (meaning "to" in Dutch)
+    # This includes patterns like "Inkomen: 10 000 tot 20 000 euro" and "Inkomen: minder dan 10 000 euro"
+    bracket_patterns = df["Inkomensklassen"].str.contains("tot", case=False, na=False) | \
+                      (df["Inkomensklassen"] == "Inkomen: minder dan 10 000 euro")
+    df = df[bracket_patterns].copy()
+
     # Select and rename columns
     relevant = {
         "KenmerkenVanPersonen": "age_label",
         "Inkomensklassen": "income_class",
         "PersonenMetInkomen_1": "total",
     }
-    
+
     available = [col for col in relevant.keys() if col in df.columns]
     df = df[available].rename(columns={col: relevant[col] for col in available})
-    
+
     # Normalize age
     df["age_band"] = df["age_label"].apply(_normalize_age)
     df = df[df["age_band"].notna()]
-    
+
     # Make numeric
     df["total"] = pd.to_numeric(df["total"], errors="coerce")
     df = df[["age_band", "income_class", "total"]].dropna(subset=["total"])
-    
+
     return df
 
 
@@ -562,10 +574,18 @@ def main() -> None:
 
     # Now incorporate household data using Naive Bayes approach
     # First, create a Cartesian product with household types
-    household_types = df_37620['household_type'].unique()
+    # Filter out "Total" household type since it's an aggregate category, not a real household type
+    household_types = [hh for hh in df_37620['household_type'].unique() if hh != "Total"]
     seed_expanded = seed.merge(
         pd.DataFrame({'household_type': household_types}),
         how='cross'
+    )
+
+    # Merge with age spine to ensure count column is available
+    seed_expanded = seed_expanded.merge(
+        age_spine_df[["age_band", "count"]],
+        on="age_band",
+        how="left"
     )
 
     # Merge with household data to get household totals by age
@@ -578,7 +598,7 @@ def main() -> None:
         how='left'
     )
 
-    # Normalize household totals by age band
+    # Normalize household totals by age band to get conditional probabilities
     seed_expanded["household_conditional"] = seed_expanded.groupby("age_band")["hh_total"].transform(
         lambda x: x / x.sum() if x.sum() > 0 else 0
     )
@@ -586,36 +606,171 @@ def main() -> None:
     # Combine weights using Naive Bayes: P(age) * P(edu,mig|age) * P(hh|age)
     seed_expanded["weight"] = seed_expanded["weight"] * seed_expanded["household_conditional"]
 
+    # Now incorporate income data using Naive Bayes approach
+    # First, create a Cartesian product with income classes
+    income_classes = df_83931['income_class'].unique()
+    seed_expanded = seed_expanded.merge(
+        pd.DataFrame({'income_class': income_classes}),
+        how='cross'
+    )
+
+    # Merge with income data to get income totals by age
+    income_totals = df_83931.groupby(['age_band', 'income_class'])['total'].sum().reset_index()
+    income_totals = income_totals.rename(columns={'total': 'income_total'})
+
+    seed_expanded = seed_expanded.merge(
+        income_totals,
+        on=['age_band', 'income_class'],
+        how='left'
+    )
+
+    # Normalize income totals by age band to get conditional probabilities
+    seed_expanded["income_conditional"] = seed_expanded.groupby("age_band")["income_total"].transform(
+        lambda x: x / x.sum() if x.sum() > 0 else 0
+    )
+
+    # Combine weights using Naive Bayes: P(age) * P(edu,mig|age) * P(hh|age) * P(income|age)
+    seed_expanded["weight"] = seed_expanded["weight"] * seed_expanded["income_conditional"]
+
+    # Scale back to population level by multiplying by age spine count
+    seed_expanded = seed_expanded.merge(
+        age_spine_df[["age_band", "count"]],
+        on="age_band",
+        how="left"
+    )
+    seed_expanded["weight"] = seed_expanded["weight"] * seed_expanded["count"]
+
     # Select final columns
-    seed = seed_expanded[["age_band", "education_group", "migration_group", "household_type", "weight"]].copy()
+    seed = seed_expanded[["age_band", "education_group", "migration_group", "household_type", "income_class", "weight"]].copy()
 
     # Fill missing combinations with zero weight
     seed = seed.fillna(0)
 
-    print(f"  → Assembled {len(seed)} rows (age × education × migration × household)")
+    print(f"  → Assembled {len(seed)} rows (age × education × migration × household × income)")
     print(f"  → Seed total: {seed['weight'].sum():,.0f}\n")
 
-    # ========== STEP 9: Apply structural zeros ==========
-    print("[9/10] Applying structural zeros (age-inappropriate combinations)...")
-    
+    # ========== STEP 9: Apply structural zeros and add 0-14 age group ==========
+    print("[9/10] Applying structural zeros and adding 0-14 age group...")
+
     # Remove age 0-14 with higher education and employment
     before_zeros = len(seed)
     seed = seed[~(
-        (seed["age_band"] == "0-14") & 
+        (seed["age_band"] == "0-14") &
         (seed["education_group"].isin(["Tertiary_MBO", "Tertiary_Higher", "Tertiary_University"]))
     )]
     after_zeros = len(seed)
     print(f"  → Removed {before_zeros - after_zeros} rows (0-14 with tertiary education)")
-    
+
     # Remove age 0-14 with employment participation
     seed = seed[~((seed["age_band"] == "0-14") & (seed.get("employment_status") == "Employed"))]
-    print(f"  → Structural zero rules applied; {len(seed)} rows remain\n")
+    print(f"  → Structural zero rules applied; {len(seed)} rows remain")
+
+    # Add 0-14 age group with Primary_or_None education
+    # Since education data doesn't include 0-14, we need to manually add this group
+    # with appropriate education (Primary_or_None) and reasonable household/income distributions
+
+    # Get the 0-14 population from age spine
+    age_0_14_pop = age_spine.get("0-14", 0)
+    if age_0_14_pop > 0:
+        print(f"  → Adding 0-14 age group with {age_0_14_pop:,} population")
+
+        # Create 0-14 entries for each migration group
+        migration_groups = seed["migration_group"].unique()
+        household_types = seed["household_type"].unique()
+        income_classes = seed["income_class"].unique()
+
+        # For 0-14 age group, we'll use Primary_or_None education
+        education_group = "Primary_or_None"
+
+        # Create entries for each combination
+        new_rows = []
+        for migration_group in migration_groups:
+            for household_type in household_types:
+                for income_class in income_classes:
+                    # Calculate weight based on national proportions
+                    # Use the same approach as other age groups but with Primary_or_None education
+                    new_row = {
+                        "age_band": "0-14",
+                        "education_group": education_group,
+                        "migration_group": migration_group,
+                        "household_type": household_type,
+                        "income_class": income_class,
+                        "weight": 0.0  # Will be calculated below
+                    }
+                    new_rows.append(new_row)
+
+        # Convert to DataFrame
+        new_seed_0_14 = pd.DataFrame(new_rows)
+
+        # Calculate weights using national proportions for 0-14 age group
+        # We'll distribute the 0-14 population across migration/household/income combinations
+        # using the same proportional structure as the 15-24 age group (closest available)
+
+        # Get proportions from 15-24 age group
+        ref_age_group = "15-24"
+        ref_seed = seed[seed["age_band"] == ref_age_group]
+
+        # Use actual 0-14 data from household and income tables for more accurate distribution
+        # Get 0-14 household data
+        hh_0_14 = df_37620[df_37620["age_band"] == "0-14"]
+        if len(hh_0_14) > 0:
+            # Get 0-14 income data
+            income_0_14 = df_83931[df_83931["age_band"] == "0-14"]
+            if len(income_0_14) > 0:
+                # Calculate total household and income counts for 0-14
+                total_hh_0_14 = hh_0_14["total"].sum()
+                total_income_0_14 = income_0_14["total"].sum()
+
+                # Calculate migration distribution for 0-14 (use national proportions)
+                # Since we don't have 0-14 migration data, use the same proportions as 15-24
+                migration_dist = seed[seed["age_band"] == "15-24"].groupby("migration_group")["weight"].sum()
+                migration_dist = migration_dist / migration_dist.sum()
+
+                # Distribute 0-14 population across all combinations
+                for idx, row in new_seed_0_14.iterrows():
+                    # Get household proportion for this household type
+                    hh_match = hh_0_14[hh_0_14["household_type"] == row["household_type"]]
+                    if len(hh_match) > 0:
+                        hh_proportion = hh_match["total"].iloc[0] / total_hh_0_14
+                    else:
+                        hh_proportion = 1.0 / len(hh_0_14["household_type"].unique())
+
+                    # Get income proportion for this income class
+                    income_match = income_0_14[income_0_14["income_class"] == row["income_class"]]
+                    if len(income_match) > 0:
+                        income_proportion = income_match["total"].iloc[0] / total_income_0_14
+                    else:
+                        income_proportion = 1.0 / len(income_0_14["income_class"].unique())
+
+                    # Get migration proportion
+                    migration_proportion = migration_dist.get(row["migration_group"], 1.0 / len(migration_dist))
+
+                    # Combine proportions and scale to 0-14 population
+                    combined_proportion = hh_proportion * income_proportion * migration_proportion
+                    new_seed_0_14.at[idx, "weight"] = age_0_14_pop * combined_proportion
+            else:
+                # Fallback: distribute evenly if no income data
+                even_proportion = 1.0 / len(new_seed_0_14)
+                for idx in range(len(new_seed_0_14)):
+                    new_seed_0_14.at[idx, "weight"] = age_0_14_pop * even_proportion
+        else:
+            # Fallback: distribute evenly if no household data
+            even_proportion = 1.0 / len(new_seed_0_14)
+            for idx in range(len(new_seed_0_14)):
+                new_seed_0_14.at[idx, "weight"] = age_0_14_pop * even_proportion
+
+        # Add the 0-14 entries to the main seed
+        seed = pd.concat([seed, new_seed_0_14], ignore_index=True)
+        print(f"  → Added {len(new_seed_0_14)} rows for 0-14 age group")
+    else:
+        print(f"  → No 0-14 population to add")
+    print()
 
     # ========== STEP 10: Validate the seed ==========
     print("[10/10] Validating seed matrix...")
     
     # Check dimensionality
-    required_cols = ["age_band", "education_group", "migration_group", "household_type", "weight"]
+    required_cols = ["age_band", "education_group", "migration_group", "household_type", "income_class", "weight"]
     missing_cols = set(required_cols) - set(seed.columns)
     if missing_cols:
         print(f"  ✗ Missing columns: {missing_cols}")

@@ -84,7 +84,7 @@
 **Next Steps:**
 - Investigate education constraint mapping issue (ID system mismatch)
 - Test IPF on additional buurten
-- Integrate with Phase 3 microdata instantiation
+- Integrate with Phase 3 microdata instantiation integration
 
 ## Phase 2 IPF Testing: Multi-Buurt Success ✓ (2026-06-05 00:37)
 
@@ -250,3 +250,57 @@
 - Update analysis scripts to reflect current pipeline structure
 - Update documentation to remove 82309NED references
 - Consider future use of 82309NED data if employment constraints are needed
+
+## Phase 2 IPF Enhancement: Income Data Filtering ✓ (2026-06-05 11:00)
+
+**Pipeline optimization: Implemented income class filtering to remove duplicate data**
+
+**Key Insight**: The 83931NED dataset contained both bracket-based income classifications ("Inkomen X tot Y") and percentile-based classifications (10% groups), causing data duplication where totals were being double-counted.
+
+**Implementation:**
+- ✅ Updated `load_and_preprocess_83931ned()` in `src/generate_seed.py` to filter for only bracket-based income classes
+- ✅ Updated `extract_national_income_probabilities()` in `src/IPF.py` to use the same filtering logic
+- ✅ Added filtering criteria: keep only income classes containing "tot" or "minder dan 10 000 euro"
+- ✅ Excluded all percentile-based patterns ("Xe 10%-groep")
+
+**Results:**
+- **Before Filtering**: 18 income classes (7 bracket-based + 10 percentile-based + "minder dan 10 000 euro")
+- **After Filtering**: 7 income classes (only bracket-based patterns)
+- **Data Quality**: Eliminated double-counting and ensures clean, focused income classification
+- **Pipeline Integrity**: The entire pipeline now works with consistent, filtered income data
+
+**Filtered Income Classes (7 total):**
+1. `Inkomen: minder dan 10 000 euro`
+2. `Inkomen: 10 000 tot 20 000 euro`
+3. `Inkomen: 20 000 tot 30 000 euro`
+4. `Inkomen: 30 000 tot 40 000 euro`
+5. `Inkomen: 40 000 tot 50 000 euro`
+6. `Inkomen: 50 000 tot 100 000 euro`
+7. `Inkomen: 100 000 tot 200 000 euro`
+
+**Excluded Income Classes (10 percentile-based):**
+- All "Xe 10%-groep" patterns (e.g., "Inkomen: 1e 10%-groep (laag inkomen)")
+
+**Validation Issues Identified:**
+- **IPF Convergence**: The IPF algorithm is converging too quickly and not reaching the full target population
+- **Marginal Mismatches**: All constraints show consistent ~13-14% errors, indicating a systematic scaling issue
+- **Fitted Total**: IPF produces 2,981 total population vs expected 3,450 (86% of target)
+- **Root Cause**: IPF convergence parameters may need adjustment for the 5-dimensional optimization
+
+**Next Steps for Validation Fix:**
+- Investigate IPF library parameters and convergence settings
+- Adjust tolerance thresholds and iteration limits
+- Consider alternative scaling approaches for the seed matrix
+- Test with different IPF initialization strategies
+
+**Files Modified:**
+- `src/generate_seed.py`: Added income class filtering in preprocessing
+- `src/IPF.py`: Added income class filtering in constraint extraction
+- `LOG.md`: Added income filtering documentation
+
+**Benefits:**
+- ✅ Cleaner, more focused income classification system
+- ✅ Eliminates data duplication and double-counting
+- ✅ More realistic income brackets for analysis
+- ✅ Consistent filtering across entire pipeline
+- ✅ Better alignment with user requirements

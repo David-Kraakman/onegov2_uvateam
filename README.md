@@ -18,6 +18,16 @@ python src/generate_seed.py --reference-dir data/reference --out-dir data/seed
 python src/IPF.py --buurt BU16800000 --seed_dir data/seed --reference_dir data/reference
 ```
 
+
+```bash
+# commands for downloading relevant raw data files.
+uv run tooling/fetchers/cbs_statline.py --table 37620 --out data/reference
+uv run tooling/fetchers/cbs_statline.py --table 82275NED --out data/reference
+uv run tooling/fetchers/cbs_statline.py --table 82309NED --out data/reference
+uv run tooling/fetchers/cbs_statline.py --table 83931NED --out data/reference
+uv run tooling/fetchers/cbs_statline.py --table 86165NED --out data/reference
+```
+
 ## 📚 Documentation
 
 For complete documentation, see [DOCUMENTATION.md](DOCUMENTATION.md)

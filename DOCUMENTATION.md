@@ -73,7 +73,7 @@ Original CBS datasets downloaded using the fetcher tools:
 
 #### Core Artifacts
 - `age_spine.parquet` - National age distribution (5 bins: 0-14, 15-24, 25-44, 45-64, 65+)
-- `seed_matrix.parquet` - National seed matrix (age × education × migration × household with weights)
+- `seed_matrix.parquet` - National seed matrix (age × education × migration × household × income with weights)
 - `preprocessing_metadata.json` - Complete metadata about preprocessing steps
 
 ### Phase 2: IPF Execution Artifacts
@@ -109,7 +109,7 @@ Original CBS datasets downloaded using the fetcher tools:
 3. Harmonize age bins to 5 categories
 4. Build national age spine
 5. Force-scale joint tables to age spine
-6. Assemble Cartesian product seed matrix (age × education × migration × household)
+6. Assemble Cartesian product seed matrix (age × education × migration × household × income)
 7. Apply structural zeros (age-inappropriate combinations)
 8. Validate and save artifacts
 ```
@@ -159,6 +159,7 @@ The pipeline uses a Star Schema approach around the Age variable to avoid infini
 - **Structural Zeros**: Explicit handling of impossible combinations
 - **Multi-level Constraints**: Age, migration, education, and household constraints working together
 - **Household Composition Modeling**: Realistic household type distributions using national proportions
+- **Income Distribution Modeling**: Comprehensive income class distributions integrated into the seed matrix
 
 ## 🔗 Key Relationships
 - **Seed Matrix** → **IPF Input**: The national seed matrix provides the starting point for all buurt-level IPF runs
