@@ -31,19 +31,19 @@ class HouseholdData:
 
     def copy(self):
         return HouseholdData(
-            self.households,
-            self.single,
-            self.together,
-            self.kids,
-            self.problem_nodes,
+            single=self.single,
+            together=self.together,
+            kids=self.kids,
+            problem_nodes=self.problem_nodes,
+            size_diff=self.size_diff,
         )
 
     def set(self, other):
-        self.households = other.households
         self.single = other.single
         self.together = other.together
         self.kids = other.kids
         self.problem_nodes = other.problem_nodes
+        self.size_diff = other.size_diff
 
 
 @dataclass
@@ -93,7 +93,6 @@ def remove_household(household: dict[int, Person], data: HouseholdData):
         case HouseholdType.PROBLEM:
             # Problem nodes: doesn't fit any category
             data.problem_nodes -= household_size
-            data.households += 1
 
 
 def add_household(household: dict[int, Person], data: HouseholdData):
@@ -109,7 +108,6 @@ def add_household(household: dict[int, Person], data: HouseholdData):
         case HouseholdType.KIDS:
             data.kids += 1
         case HouseholdType.PROBLEM:
-            data.households -= 1
             # Problem nodes: doesn't fit any category
             data.problem_nodes += household_size
 
@@ -129,14 +127,6 @@ def iterate_islands(g: nx.Graph):
         yield island
 
 
-def count_households(households: list[dict[int, Person]]) -> HouseholdData:
-    data = HouseholdData(0, 0, 0, 0, 0)
-    for household in households:
-        print(household)
-        add_household(household, data)
-    return data
-
-
 def calculate_energy(household_data: HouseholdData) -> float:
     """
     Calculate energy as the sum of squared differences from target values.
@@ -152,13 +142,7 @@ def calculate_energy(household_data: HouseholdData) -> float:
     kids_diff = abs(household_data.kids - households_kids_target) ** 2
     problem_diff = household_data.problem_nodes**2
 
-    energy = (
-        single_diff
-        + together_diff
-        + kids_diff
-        + problem_diff
-        + household_data.size_diff * 2
-    )
+    energy = single_diff + together_diff + kids_diff + problem_diff
     return energy
 
 
@@ -212,7 +196,13 @@ def sample_nodes(
             e = f"Invalid householdtype for person {node1}"
             raise Exception(e)
     node2_index = random.randint(0, len(node2_samples) - 1)
-    node2 = node_ids[node2_index]
+    node2 = node2_samples[node2_index]
+
+    # Ensure node1 and node2 are different
+    while node2 == node1:
+        node2_index = random.randint(0, len(node2_samples) - 1)
+        node2 = node2_samples[node2_index]
+
     return node1, node2
 
 
@@ -235,20 +225,26 @@ def household_connect(
     household1: dict[int, Person],
     household2: dict[int, Person],
 ):
-    for id in household1.keys():
-        household1_num = household_index[id]
-        break
+    household1_num = household_index[next(iter(household1.keys()))]
     first = True
+    household2_num = None
     for id, person in household2.items():
         if first:
             household2_num = household_index[id]
         household_index[id] = household1_num
         household1[id] = person
 
+    if household2_num is None:
+        e = "Empty household present"
+        raise Exception(e)
+
     replcmnt = households.pop()
     if household2_num != len(households):
-        # Household2 wasnt the replacement
+        # Household2 wasn't the replacement
         households[household2_num] = replcmnt
+        # Update indices for all nodes in the moved household
+        for id in replcmnt.keys():
+            household_index[id] = household2_num
 
 
 def household_reset(
@@ -299,7 +295,7 @@ def change_household(
         remove_household(node1_household, new_data)
         remove_household(node2_household, new_data)
         household_connect(households, household_index, node1_household, node2_household)
-        add_household(node1_household, data)
+        add_household(node1_household, new_data)
         if metropolis_criterion(new_data, data, temperature):
             data.set(new_data)
         else:
@@ -312,13 +308,28 @@ def infer_households(g: nx.Graph) -> tuple[list[dict[int, Person]], dict[int, in
     households = []
     household_index = {}
 
+    def parse_householdtype(name: str) -> HouseholdType:
+        if name == "kids":
+            return HouseholdType.KIDS
+        elif name == "together":
+            return HouseholdType.TOGETHER
+        elif name == "single":
+            return HouseholdType.SINGLE
+        else:
+            e = "Invalid householdtype in input"
+            raise Exception(e)
+
     for i, island in enumerate(iterate_islands(g)):
         # Get all nodes in this household island
         # TODO: Householdtype may mismatch with generated data
+        subgraph = nx.subgraph(g, island)
         households.append(
             {
-                node_id: Person(node["household_type"], node["age"])
-                for node_id, node in zip(island, nx.subgraph(g, island))
+                node_id: Person(
+                    parse_householdtype(subgraph.nodes[node_id]["household_type"]),
+                    subgraph.nodes[node_id]["age"],
+                )
+                for node_id in island
             }
         )
         for node_id in island:
@@ -357,6 +368,13 @@ def apply_edge(g: nx.Graph, households: list[dict[int, Person]]):
             g.add_edge(node1, node2)
 
 
+def count_households(households: list[dict[int, Person]]) -> HouseholdData:
+    data = HouseholdData(0, 0, 0, 0, 0)
+    for household in households:
+        add_household(household, data)
+    return data
+
+
 def link_neighborhood(g: nx.Graph):
     """
     Link households in the neighborhood using simulated annealing.
@@ -370,7 +388,7 @@ def link_neighborhood(g: nx.Graph):
     """
     # Simulated annealing parameters
     initial_temperature = 1000.0
-    cooling_rate = 0.99
+    cooling_rate = 0.9999
     min_temperature = 1e-8
     iterations_per_temp = 100
 
@@ -407,5 +425,6 @@ def link_neighborhood(g: nx.Graph):
             f"Iteration {iteration}, T={temperature:.4f}, Energy={calculate_energy(data):.2f}"
         )
         print(
-            f"  Total: {data.households}, Single: {data.single}, Together: {data.together}, Kids: {data.kids}, Problem:{data.problem_nodes}"
+            f"  Single: {data.single}, Together: {data.together}, Kids: {data.kids}, Problem:{data.problem_nodes} Size Difference:{data.size_diff}"
         )
+    apply_edge(g, households)
