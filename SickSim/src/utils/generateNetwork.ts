@@ -5,19 +5,27 @@ type GenerateNetworkOptions = {
   averageDegree?: number;
 };
 
-const buurtcodes = ['BU1180', 'BU1181', 'BU1182', 'BU1183', 'WK0301', 'WK0302'];
-const wijkcodes = ['WK0101', 'WK0102', 'WK0103', 'WK0201', 'WK0202'];
+const buurtcodes = ['BU1180', 'BU1181', 'BU1182', 'BU1183'];
+const wijkcodes = ['WK0301', 'WK0302'];
 const woningtypes = ['appartement', 'rijtjeshuis', 'vrijstaand'] as const;
 const huishoudenSamenstellingen = ['Eenpersoon', 'Koppel', 'Gezin', 'Groot gezin'] as const;
 
+// We geven elke buurt een fysieke locatie op de 'kaart'
+const buurtCenters: Record<string, { x: number; y: number }> = {
+  'BU1180': { x: 200, y: 200 },
+  'BU1181': { x: 600, y: 200 },
+  'BU1182': { x: 200, y: 600 },
+  'BU1183': { x: 600, y: 600 },
+};
+
 export function generateSyntheticNetwork(options: GenerateNetworkOptions = {}): NetworkData {
-  const nodeCount = options.nodeCount ?? 160;
-  const averageDegree = options.averageDegree ?? randomInteger(5, 11);
+  const nodeCount = options.nodeCount ?? 400; // Verhoogd naar 400 voor een drukker netwerk
+  const averageDegree = options.averageDegree ?? randomInteger(4, 9);
   const nodes = createNodes(nodeCount);
   const edges = createEdges(nodes, averageDegree);
 
   return {
-    fileName: `gegenereerd-netwerk-${Date.now()}.json`,
+    fileName: `abm-netwerk-${Date.now()}.json`,
     nodes,
     edges,
     warnings: [],
@@ -25,102 +33,83 @@ export function generateSyntheticNetwork(options: GenerateNetworkOptions = {}): 
 }
 
 function createNodes(nodeCount: number): NetworkNode[] {
-  const centerJitterX = randomNumber(-18, 18);
-  const centerJitterY = randomNumber(-14, 14);
-
   return Array.from({ length: nodeCount }, (_, index) => {
-    const angle = (index / nodeCount) * Math.PI * 2 + randomNumber(-0.08, 0.08);
-    const ring = 90 + (index % 5) * 34 + randomNumber(-18, 18);
+    const buurtIndex = index % buurtcodes.length;
+    const buurtcode = buurtcodes[buurtIndex];
+    
+    // Haal het middelpunt van deze specifieke buurt op
+    const center = buurtCenters[buurtcode];
+    
+    // Verspreid de inwoners rondom het middelpunt van hun eigen buurt
+    const radius = randomNumber(10, 160); // Hoe groot is de wijk visueel
+    const angle = randomNumber(0, Math.PI * 2);
 
     return {
       id: `persoon-${index + 1}`,
-      label: `Persoon ${index + 1}`,
-      x: 300 + centerJitterX + Math.cos(angle) * ring,
-      y: 240 + centerJitterY + Math.sin(angle) * ring,
-      profile: createAgentProfile(index),
+      label: `Agent ${index + 1}`,
+      x: center.x + Math.cos(angle) * radius,
+      y: center.y + Math.sin(angle) * radius,
+      profile: createAgentProfile(index, buurtcode, wijkcodes[index % wijkcodes.length]),
     };
   });
 }
 
-function createAgentProfile(index: number): AgentProfile {
-  const buurtIndex = index % buurtcodes.length;
-  const wijkIndex = index % wijkcodes.length;
-  const woonkamerTypeIndex = index % woningtypes.length;
-  const huishoudgrootte = randomInteger(1, 5);
-  const leeftijdsverdeling = generateAgeDistribution();
-  const opleiding = generateEducationDistribution();
-  const woningtype = woningtypes[woonkamerTypeIndex];
+function createAgentProfile(index: number, buurtcode: string, wijkcode: string): AgentProfile {
+  const woningTypeIndex = index % woningtypes.length;
+
+  const l_0_14 = randomInteger(10, 22);
+  const l_15_24 = randomInteger(8, 18);
+  const l_25_44 = randomInteger(22, 35);
+  const l_45_64 = randomInteger(20, 30);
+  const l_65_plus = 100 - (l_0_14 + l_15_24 + l_25_44 + l_45_64);
+
+  const o_laag = randomInteger(15, 35);
+  const o_midden = randomInteger(30, 50);
+  const o_hoog = 100 - (o_laag + o_midden);
+
+  const bezettingsgraadWoning = Number(randomNumber(1.2, 3.6).toFixed(1));
 
   return {
-    buurtcode: buurtcodes[buurtIndex],
-    wijkcode: wijkcodes[wijkIndex],
-    bevolkingsomvang: randomInteger(900, 12000),
-    leeftijdsverdeling,
-    huishoudgrootte,
+    buurtcode, // Direct gekoppeld aan de fysieke cluster!
+    wijkcode,
+    bevolkingsomvang: randomInteger(800, 14000),
+    leeftijdsverdeling: { '0-14': l_0_14, '15-24': l_15_24, '25-44': l_25_44, '45-64': l_45_64, '65+': l_65_plus },
+    huishoudgrootte: bezettingsgraadWoning,
     huishoudenSamenstelling: huishoudenSamenstellingen[randomInteger(0, huishoudenSamenstellingen.length - 1)],
-    aandeelNietWesterseAchtergrond: randomInteger(3, 35),
-    woningtype,
-    bezettingsgraadWoning: Number((randomNumber(1.2, 2.4)).toFixed(1)),
-    gemiddeldBestedbaarInkomen: randomInteger(22000, 72000),
-    stedelijkheidsgraad: randomInteger(20, 100),
-    opleidingsniveau: opleiding,
-    rwzi: {
-      id: `RWZI-${100 + index}`,
-      naam: `RWZI locatie ${index + 1}`,
-      locatie: `Utrecht-${wijkcodes[wijkIndex]}`,
-      capaciteit: randomInteger(1500, 8500),
-    },
-    catchment: {
-      oppervlakteKm2: Number(randomNumber(4.2, 22.5).toFixed(1)),
-      aansluitingen: randomInteger(4200, 14800),
-    },
-    landgebruik: {
-      woongebied: randomInteger(22, 58),
-      industrie: randomInteger(5, 28),
-      agrarisch: randomInteger(8, 38),
-    },
-    nabijheidHavenKm: Number(randomNumber(8, 95).toFixed(1)),
+    aandeelNietWesterseAchtergrond: randomInteger(3, 45),
+    woningtype: woningtypes[woningTypeIndex],
+    bezettingsgraadWoning,
+    gemiddeldBestedbaarInkomen: randomInteger(24000, 68000),
+    stedelijkheidsgraad: randomInteger(1, 5),
+    opleidingsniveau: { laag: o_laag, midden: o_midden, hoog: o_hoog },
+    rwzi: { id: `RWZI-${100 + index}`, naam: `RWZI Locatie ${index + 1}`, locatie: `Utrecht-${wijkcode}`, capaciteit: randomInteger(2000, 9500) },
+    catchment: { oppervlakteKm2: Number(randomNumber(4.0, 20.0).toFixed(1)), aansluitingen: randomInteger(3500, 14000) },
+    landgebruik: { woongebied: randomInteger(25, 60), industrie: randomInteger(5, 25), agrarisch: randomInteger(0, 30) },
+    nabijheidHavenKm: Number(randomNumber(3.5, 65.0).toFixed(1)),
   };
-}
-
-function generateAgeDistribution() {
-  const distribution = {
-    '0-14': randomInteger(8, 20),
-    '15-24': randomInteger(8, 18),
-    '25-44': randomInteger(22, 34),
-    '45-64': randomInteger(20, 30),
-    '65+': 0,
-  };
-  const total = distribution['0-14'] + distribution['15-24'] + distribution['25-44'] + distribution['45-64'];
-  distribution['65+'] = 100 - total;
-  return distribution;
-}
-
-function generateEducationDistribution() {
-  const laag = randomInteger(18, 40);
-  const midden = randomInteger(22, 46);
-  const hoog = Math.max(5, 100 - laag - midden);
-  return { laag, midden, hoog };
 }
 
 function createEdges(nodes: NetworkNode[], averageDegree: number): NetworkEdge[] {
   const edges = new Map<string, NetworkEdge>();
-  const localConnections = Math.max(2, Math.round(averageDegree * 0.65));
-  const randomConnections = Math.max(1, Math.round(averageDegree * 0.18));
-
+  
+  // Connecties worden nu logischer: veel contact binnen de eigen buurt, minder daarbuiten
   nodes.forEach((node, index) => {
-    for (let offset = 1; offset <= localConnections; offset += 1) {
-      addEdge(edges, node.id, nodes[(index + offset) % nodes.length].id, 1);
+    // Zoek mensen in DEZELFDE buurt voor sterke lokale connecties
+    const buren = nodes.filter(n => n.profile?.buurtcode === node.profile?.buurtcode && n.id !== node.id);
+    const localConnections = Math.max(2, Math.round(averageDegree * 0.7));
+    
+    for (let i = 0; i < localConnections; i++) {
+      if (buren.length > 0) {
+        const buur = buren[randomInteger(0, buren.length - 1)];
+        addEdge(edges, node.id, buur.id, 1);
+      }
     }
 
-    if (index % 4 === 0) {
-      const householdTarget = nodes[(index + 1) % nodes.length];
-      addEdge(edges, node.id, householdTarget.id, 1.6);
-    }
-
+    // Willekeurige connecties naar andere wijken (werk/school/sport)
+    const randomConnections = Math.max(1, Math.round(averageDegree * 0.3));
     for (let jump = 0; jump < randomConnections; jump += 1) {
       const targetIndex = randomInteger(0, nodes.length - 1);
-      addEdge(edges, node.id, nodes[targetIndex].id, randomNumber(0.4, 1.2));
+      addEdge(edges, node.id, nodes[targetIndex].id, 0.5);
     }
   });
 
@@ -129,18 +118,10 @@ function createEdges(nodes: NetworkNode[], averageDegree: number): NetworkEdge[]
 
 function addEdge(edges: Map<string, NetworkEdge>, source: string, target: string, weight: number) {
   if (source === target) return;
-
   const [a, b] = source < target ? [source, target] : [target, source];
   const key = `${a}-${b}`;
-  if (!edges.has(key)) {
-    edges.set(key, { source: a, target: b, weight });
-  }
+  if (!edges.has(key)) edges.set(key, { source: a, target: b, weight });
 }
 
-function randomInteger(min: number, max: number) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function randomNumber(min: number, max: number) {
-  return Math.random() * (max - min) + min;
-}
+function randomInteger(min: number, max: number) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+function randomNumber(min: number, max: number) { return Math.random() * (max - min) + min; }

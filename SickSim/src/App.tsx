@@ -57,7 +57,13 @@ export function App() {
         <Navbar activePage={activePage} onPageChange={goToPage} />
         <section className={`flex min-h-0 flex-1 transition-all duration-500 ${loaded ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'}`}>
           {activePage === 'Pipeline overzicht' && <PipelineOverview />}
-          {activePage === 'Netwerk genereren' && <NetworkGeneration network={network} onNetworkGenerated={setNetwork} />}
+          {activePage === 'Netwerk genereren' && (
+            <NetworkGeneration 
+              network={network} 
+              onNetworkGenerated={setNetwork} 
+              dataFactors={dataFactors} // <-- Toegevoegd!
+            />
+          )}
           {activePage === 'Simulatie' && (
             <SimulationConfiguration
               config={simulationConfig}
