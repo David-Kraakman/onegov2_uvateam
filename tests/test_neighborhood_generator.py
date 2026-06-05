@@ -6,7 +6,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import networkx as nx
-from src.networking._neighborhood import (
+from src.networking._household import (
     count_households,
     link_neighborhood,
     classify_household,
