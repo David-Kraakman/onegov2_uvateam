@@ -7,10 +7,9 @@ import numpy as np
 
 household_size = 2
 
-households_target = 40000
-households_single_target = 20000
-households_together_target = 10000
-households_kids_target = 10000
+households_single_target = 10000
+households_together_target = 5000
+households_kids_target = 5000
 target_size = 2.5
 
 
@@ -47,45 +46,6 @@ class HouseholdType(Enum):
 # OverigLidHuishouden
 
 
-def map_person_types(living_situation: str) -> PersonType:
-    """
-    Map from living situation strings to HouseholdType enum.
-
-    Args:
-        living_situation: A living situation string from the data
-
-    Returns:
-        HouseholdType: The corresponding household type
-
-    Raises:
-        ValueError: If the living situation string is not recognized
-    """
-    living_situation_map = {
-        # Child living at home
-        "ThuiswonendKind": PersonType.KID,
-        # Unmarried couples
-        "PartnerInNietGehuwdPaarZonderKinderen": PersonType.TOGETHER,
-        "PartnerInNietGehuwdPaarMetKinderen": PersonType.TOGETHER_KID,
-        # Married couples
-        "PartnerInGehuwdPaarZonderKinderen": PersonType.MARRIED,
-        "PartnerInGehuwdPaarMetKinderen": PersonType.MARRIED_KID,
-        # Single parent household
-        "OuderInEenouderhuishouden": PersonType.SINGLE_KID,
-        # Single person
-        "Alleenstaand": PersonType.SINGLE,
-        # Other household member
-        "OverigLidHuishouden": PersonType.OTHER,
-    }
-
-    if living_situation not in living_situation_map:
-        raise ValueError(
-            f"Unknown living situation: '{living_situation}'. "
-            f"Valid options are: {', '.join(living_situation_map.keys())}"
-        )
-
-    return living_situation_map[living_situation]
-
-
 @dataclass
 class HouseholdData:
     single: int
@@ -113,9 +73,13 @@ class Person:
     person_type: PersonType
 
 
+total = 0
+
+
 def classify_household(household: dict[int, Person]) -> HouseholdType:
     # Extract ages of all members in this island
     kids = 0
+    other = 0
     total = 0
     person_type = None
     mismatch = False
@@ -125,6 +89,7 @@ def classify_household(household: dict[int, Person]) -> HouseholdType:
         if person.person_type == PersonType.KID:
             kids += 1
         elif person.person_type == PersonType.OTHER:
+            other += 1
             pass
         else:
             if person_type is not None and person_type != person.person_type:
@@ -139,12 +104,16 @@ def classify_household(household: dict[int, Person]) -> HouseholdType:
     if person_type in [
         PersonType.MARRIED_KID,
         PersonType.TOGETHER_KID,
-        PersonType.SINGLE_KID,
     ]:
-        if kids == 0:
+        if kids == 0 or ((total - other - kids) < 2):
             return HouseholdType.PROBLEM
-        else:
-            return HouseholdType.KIDS
+        return HouseholdType.KIDS
+    elif person_type == PersonType.SINGLE:
+        if (total - kids - other) > 1:
+            return HouseholdType.PROBLEM
+        return HouseholdType.KIDS
+    elif kids > 0:
+        return HouseholdType.PROBLEM
     if total > 1:
         return HouseholdType.TOGETHER
     else:
@@ -154,6 +123,8 @@ def classify_household(household: dict[int, Person]) -> HouseholdType:
 def remove_household(household: dict[int, Person], data: HouseholdData):
     household_type = classify_household(household)
     household_size = len(household)
+    global total
+    total -= household_size
     # Categorize household
     match household_type:
         case HouseholdType.SINGLE:
@@ -170,6 +141,8 @@ def remove_household(household: dict[int, Person], data: HouseholdData):
 def add_household(household: dict[int, Person], data: HouseholdData):
     household_type = classify_household(household)
     household_size = len(household)
+    global total
+    total += household_size
     # Categorize household
     match household_type:
         case HouseholdType.SINGLE:
@@ -210,8 +183,8 @@ def calculate_energy(household_data: HouseholdData) -> float:
     """
     single_diff = abs(household_data.single - households_single_target) ** 2
     together_diff = abs(household_data.together - households_together_target) ** 2
-    kids_diff = abs(household_data.kids - households_kids_target) ** 2
-    problem_diff = household_data.problem_nodes**2
+    kids_diff = abs(1.5 * household_data.kids - households_kids_target) ** 2
+    problem_diff = (household_data.problem_nodes) ** 2
 
     energy = single_diff + together_diff + kids_diff + problem_diff
     return energy
@@ -253,6 +226,11 @@ def sample_nodes(
     node1_index = random.randint(0, len(node_ids) - 1)
     node1 = node_ids[node1_index]
     person1 = households[household_index[node1]][node1]
+    while person1.person_type in [PersonType.SINGLE, PersonType.SINGLE_KID]:
+        node1_index = random.randint(0, len(node_ids) - 1)
+        node1 = node_ids[node1_index]
+        person1 = households[household_index[node1]][node1]
+
     node2_samples = None
     match person1.person_type:
         case PersonType.KID:
@@ -374,13 +352,14 @@ def change_household(
         node2_household = households[household_index[node2]]
         remove_household(node1_household, new_data)
         remove_household(node2_household, new_data)
+        old_household = None
         if switch:
             if len(node1_household) > 1:
                 old_household = node1_household
                 node1_household = node_disconnect(
                     households, old_household, household_index, node1
                 )
-                add_household(old_household, data)
+                add_household(old_household, new_data)
             household_connect(
                 households, household_index, node1_household, node2_household
             )
@@ -396,10 +375,49 @@ def change_household(
             household_reset(
                 households, household_index, node1_household, node2_household
             )
-            if switch:
+            if switch and (old_household is not None):
                 household_connect(
                     households, household_index, old_household, node1_household
                 )
+
+
+def map_person_types(living_situation: str) -> PersonType:
+    """
+    Map from living situation strings to HouseholdType enum.
+
+    Args:
+        living_situation: A living situation string from the data
+
+    Returns:
+        HouseholdType: The corresponding household type
+
+    Raises:
+        ValueError: If the living situation string is not recognized
+    """
+    living_situation_map = {
+        # Child living at home
+        "ThuiswonendKind": PersonType.KID,
+        # Unmarried couples
+        "PartnerInNietGehuwdPaarZonderKinderen": PersonType.TOGETHER,
+        "PartnerInNietGehuwdPaarMetKinderen": PersonType.TOGETHER_KID,
+        # Married couples
+        "PartnerInGehuwdPaarZonderKinderen": PersonType.MARRIED,
+        "PartnerInGehuwdPaarMetKinderen": PersonType.MARRIED_KID,
+        # Single parent household
+        "OuderInEenouderhuishouden": PersonType.SINGLE_KID,
+        # Single person
+        "Alleenstaand": PersonType.SINGLE,
+        # Other household member
+        "OverigLidHuishouden": PersonType.OTHER,
+    }
+
+    if living_situation not in living_situation_map:
+        raise ValueError(
+            f"Unknown living situation: '{living_situation}'. "
+            f"Valid options are: {', '.join(living_situation_map.keys())}"
+        )
+
+    return living_situation_map[living_situation]
 
 
 def infer_households(g: nx.Graph) -> tuple[list[dict[int, Person]], dict[int, int]]:
@@ -471,7 +489,7 @@ def apply_edge(g: nx.Graph, households: list[dict[int, Person]]):
     """
     for household in households:
         for node1, node2 in combinations(household.keys(), 2):
-            g.add_edge(node1, node2)
+            g.add_edge(node1, node2, layer="household")
 
 
 def count_households(households: list[dict[int, Person]]) -> HouseholdData:
@@ -506,7 +524,7 @@ def link_household(
     """
     iteration = 0
     initial_temperature = 0
-    cooling_rate = 0.999
+    cooling_rate = 0.9995
 
     node_ids = list(g.nodes)
     households, household_index = infer_households(g)
@@ -545,4 +563,6 @@ def link_household(
         print(
             f"  Single: {data.single}, Together: {data.together}, Kids: {data.kids}, Problem:{data.problem_nodes}"
         )
+        print(total)
+        print(len(households))
     apply_edge(g, households)
