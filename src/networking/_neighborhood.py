@@ -14,11 +14,76 @@ households_kids_target = 10000
 target_size = 2.5
 
 
+class PersonType(Enum):
+    KID = 0
+    TOGETHER = 1
+    TOGETHER_KID = 2
+    MARRIED = 3
+    MARRIED_KID = 4
+    SINGLE_KID = 5
+    SINGLE = 6
+    OTHER = 7
+
+
 class HouseholdType(Enum):
     SINGLE = 0
     TOGETHER = 1
     KIDS = 2
     PROBLEM = 3
+
+
+# Living situations
+# ThuiswonendKind
+#
+# PartnerInNietGehuwdPaarZonderKinderen
+# PartnerInNietGehuwdPaarMetKinderen
+#
+# PartnerInGehuwdPaarZonderKinderen
+# PartnerInGehuwdPaarMetKinderen
+#
+# OuderInEenouderhuishouden
+# Alleenstaand
+#
+# OverigLidHuishouden
+
+
+def map_person_types(living_situation: str) -> PersonType:
+    """
+    Map from living situation strings to HouseholdType enum.
+
+    Args:
+        living_situation: A living situation string from the data
+
+    Returns:
+        HouseholdType: The corresponding household type
+
+    Raises:
+        ValueError: If the living situation string is not recognized
+    """
+    living_situation_map = {
+        # Child living at home
+        "ThuiswonendKind": PersonType.KID,
+        # Unmarried couples
+        "PartnerInNietGehuwdPaarZonderKinderen": PersonType.TOGETHER,
+        "PartnerInNietGehuwdPaarMetKinderen": PersonType.TOGETHER_KID,
+        # Married couples
+        "PartnerInGehuwdPaarZonderKinderen": PersonType.MARRIED,
+        "PartnerInGehuwdPaarMetKinderen": PersonType.MARRIED_KID,
+        # Single parent household
+        "OuderInEenouderhuishouden": PersonType.SINGLE_KID,
+        # Single person
+        "Alleenstaand": PersonType.SINGLE,
+        # Other household member
+        "OverigLidHuishouden": PersonType.OTHER,
+    }
+
+    if living_situation not in living_situation_map:
+        raise ValueError(
+            f"Unknown living situation: '{living_situation}'. "
+            f"Valid options are: {', '.join(living_situation_map.keys())}"
+        )
+
+    return living_situation_map[living_situation]
 
 
 @dataclass
@@ -45,34 +110,45 @@ class HouseholdData:
 
 @dataclass
 class Person:
-    household_type: HouseholdType
-    age: int
+    person_type: PersonType
 
 
 def classify_household(household: dict[int, Person]) -> HouseholdType:
     # Extract ages of all members in this island
-    ages = []
+    kids = 0
+    total = 0
+    person_type = None
+    mismatch = False
+
     for person in household.values():
-        ages.append(person.age)
+        total += 1
+        if person.person_type == PersonType.KID:
+            kids += 1
+        elif person.person_type == PersonType.OTHER:
+            pass
+        else:
+            if person_type is not None and person_type != person.person_type:
+                mismatch = True
+            else:
+                person_type = person.person_type
 
-    # Count adults and children
-    adults_25_plus = sum(1 for age in ages if age >= 25)
-    adults_15_plus = sum(1 for age in ages if age >= 15)
-    children = len(ages) - adults_15_plus
+    if mismatch:
+        e = "Impossible household combination"
+        raise Exception(e)
 
-    # Categorize household
-    if adults_25_plus > 0 and children > 0:
-        # Adults (25+) with children
-        return HouseholdType.KIDS
-    elif adults_15_plus > 1 and children == 0:
-        # Multiple adults (25+) without children
+    if person_type in [
+        PersonType.MARRIED_KID,
+        PersonType.TOGETHER_KID,
+        PersonType.SINGLE_KID,
+    ]:
+        if kids == 0:
+            return HouseholdType.PROBLEM
+        else:
+            return HouseholdType.KIDS
+    if total > 1:
         return HouseholdType.TOGETHER
-    elif adults_15_plus == 1 and children == 0:
-        # Single adult (15+)
-        return HouseholdType.SINGLE
     else:
-        # Problem nodes: doesn't fit any category
-        return HouseholdType.PROBLEM
+        return HouseholdType.SINGLE
 
 
 def remove_household(household: dict[int, Person], data: HouseholdData):
@@ -171,25 +247,20 @@ def metropolis_criterion(
 def sample_nodes(
     households: list[dict[int, Person]],
     household_index: dict[int, int],
+    person_type_lists: dict[PersonType, list[int]],
     node_ids: list[int],
-    single: list[int],
-    together: list[int],
-    kids: list[int],
 ) -> tuple[int, int]:
     node1_index = random.randint(0, len(node_ids) - 1)
     node1 = node_ids[node1_index]
     person1 = households[household_index[node1]][node1]
     node2_samples = None
-    match person1.household_type:
-        case HouseholdType.SINGLE:
-            node2_samples = single
-        case HouseholdType.TOGETHER:
-            node2_samples = together
-        case HouseholdType.KIDS:
-            node2_samples = kids
+    match person1.person_type:
+        case PersonType.KID:
+            node2_samples = person_type_lists[person1.person_type]
+        case PersonType.OTHER:
+            node2_samples = node_ids
         case _:
-            e = f"Invalid householdtype for person {node1}"
-            raise Exception(e)
+            node2_samples = person_type_lists[person1.person_type]
     node2_index = random.randint(0, len(node2_samples) - 1)
     node2 = node2_samples[node2_index]
 
@@ -259,18 +330,32 @@ def change_household(
     node_ids,
     households: list[dict[int, Person]],
     household_index: dict[int, int],
-    single,
-    together,
-    kids,
+    person_type_lists: dict[PersonType, list[int]],
     data: HouseholdData,
     temperature: float,
 ):
+    """
+    Attempt to change household connections using PersonType-based sampling.
+
+    Args:
+        node_ids: List of all node IDs
+        households: List of household dictionaries
+        household_index: Mapping from node_id to household index
+        person_type_lists: Dictionary mapping PersonType to list of node IDs
+        data: Current household distribution data
+        temperature: Current temperature for simulated annealing
+    """
     node1, node2 = sample_nodes(
-        households, household_index, node_ids, single, together, kids
+        households, household_index, person_type_lists, node_ids
     )
 
     new_data = data.copy()
     node1_household = households[household_index[node1]]
+    switch = False
+
+    if node1_household[node1].person_type in [PersonType.KID, PersonType.OTHER]:
+        switch = True
+
     if node2 in node1_household:
         remove_household(node1_household, new_data)
         node2_household = node1_household
@@ -289,7 +374,21 @@ def change_household(
         node2_household = households[household_index[node2]]
         remove_household(node1_household, new_data)
         remove_household(node2_household, new_data)
-        household_connect(households, household_index, node1_household, node2_household)
+        if switch:
+            if len(node1_household) > 1:
+                old_household = node1_household
+                node1_household = node_disconnect(
+                    households, old_household, household_index, node1
+                )
+                add_household(old_household, data)
+            household_connect(
+                households, household_index, node1_household, node2_household
+            )
+        else:
+            household_connect(
+                households, household_index, node1_household, node2_household
+            )
+
         add_household(node1_household, new_data)
         if metropolis_criterion(new_data, data, temperature):
             data.set(new_data)
@@ -297,32 +396,24 @@ def change_household(
             household_reset(
                 households, household_index, node1_household, node2_household
             )
+            if switch:
+                household_connect(
+                    households, household_index, old_household, node1_household
+                )
 
 
 def infer_households(g: nx.Graph) -> tuple[list[dict[int, Person]], dict[int, int]]:
     households = []
     household_index = {}
 
-    def parse_householdtype(name: str) -> HouseholdType:
-        if name == "kids":
-            return HouseholdType.KIDS
-        elif name == "together":
-            return HouseholdType.TOGETHER
-        elif name == "single":
-            return HouseholdType.SINGLE
-        else:
-            e = "Invalid householdtype in input"
-            raise Exception(e)
-
     for i, island in enumerate(iterate_islands(g)):
         # Get all nodes in this household island
-        # TODO: Householdtype may mismatch with generated data
+        # TODO: living situation may mismatch with generated data
         subgraph = nx.subgraph(g, island)
         households.append(
             {
                 node_id: Person(
-                    parse_householdtype(subgraph.nodes[node_id]["household_type"]),
-                    subgraph.nodes[node_id]["age"],
+                    map_person_types(subgraph.nodes[node_id]["living_situation"]),
                 )
                 for node_id in island
             }
@@ -333,21 +424,41 @@ def infer_households(g: nx.Graph) -> tuple[list[dict[int, Person]], dict[int, in
     return households, household_index
 
 
-def distinguish_households(households: list[dict[int, Person]]):
-    single = list()
-    together = list()
-    kids = list()
-    for household in households:
-        for id, person in household.items():
-            match person.household_type:
-                case HouseholdType.KIDS:
-                    kids.append(id)
-                case HouseholdType.TOGETHER:
-                    together.append(id)
-                case HouseholdType.SINGLE:
-                    single.append(id)
+def distinguish_households(
+    households: list[dict[int, Person]],
+) -> dict[PersonType, list[int]]:
+    """
+    Categorize people by their PersonType with possible overlap.
 
-    return single, together, kids
+    A person can belong to multiple lists based on their PersonType:
+    - KID: only in KID list
+    - TOGETHER: only in TOGETHER list
+    - TOGETHER_KID: in both TOGETHER_KID list (and implicitly relates to kids)
+    - MARRIED: only in MARRIED list
+    - MARRIED_KID: in both MARRIED_KID list (and implicitly relates to kids)
+    - SINGLE_KID: in both SINGLE_KID list (and implicitly relates to kids)
+    - SINGLE: only in SINGLE list
+    - OTHER: only in OTHER list
+
+    Args:
+        households: List of household dictionaries mapping node_id to Person
+
+    Returns:
+        Dictionary mapping PersonType to list of node IDs of that type
+    """
+    person_type_lists = {person_type: [] for person_type in PersonType}
+
+    for household in households:
+        for node_id, person in household.items():
+            person_type_lists[person.person_type].append(node_id)
+            if person.person_type in [
+                PersonType.TOGETHER_KID,
+                PersonType.MARRIED_KID,
+                PersonType.SINGLE_KID,
+            ]:
+                person_type_lists[PersonType.KID].append(node_id)
+
+    return person_type_lists
 
 
 def apply_edge(g: nx.Graph, households: list[dict[int, Person]]):
@@ -400,7 +511,7 @@ def link_neighborhood(
     node_ids = list(g.nodes)
     households, household_index = infer_households(g)
     data = count_households(households)
-    single, together, kids = distinguish_households(households)
+    person_type_lists = distinguish_households(households)
 
     temperature = initial_temperature
     energy = calculate_energy(data)
@@ -415,9 +526,7 @@ def link_neighborhood(
                 node_ids,
                 households,
                 household_index,
-                single,
-                together,
-                kids,
+                person_type_lists,
                 data,
                 temperature,
             )
