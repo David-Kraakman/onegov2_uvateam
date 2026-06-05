@@ -57,11 +57,7 @@ function createNodes(nodeCount: number): NetworkNode[] {
 function createAgentProfile(index: number, buurtcode: string, wijkcode: string): AgentProfile {
   const woningTypeIndex = index % woningtypes.length;
 
-  const l_0_14 = randomInteger(10, 22);
-  const l_15_24 = randomInteger(8, 18);
-  const l_25_44 = randomInteger(22, 35);
-  const l_45_64 = randomInteger(20, 30);
-  const l_65_plus = 100 - (l_0_14 + l_15_24 + l_25_44 + l_45_64);
+  const leeftijd = randomInteger(0, 90);
 
   const o_laag = randomInteger(15, 35);
   const o_midden = randomInteger(30, 50);
@@ -73,7 +69,7 @@ function createAgentProfile(index: number, buurtcode: string, wijkcode: string):
     buurtcode, // Direct gekoppeld aan de fysieke cluster!
     wijkcode,
     bevolkingsomvang: randomInteger(800, 14000),
-    leeftijdsverdeling: { '0-14': l_0_14, '15-24': l_15_24, '25-44': l_25_44, '45-64': l_45_64, '65+': l_65_plus },
+    leeftijd,
     huishoudgrootte: bezettingsgraadWoning,
     huishoudenSamenstelling: huishoudenSamenstellingen[randomInteger(0, huishoudenSamenstellingen.length - 1)],
     aandeelNietWesterseAchtergrond: randomInteger(3, 45),

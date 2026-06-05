@@ -37,6 +37,14 @@ export function NetworkGeneration({ network, onNetworkGenerated, dataFactors }: 
   ];
 
   // Bereken de exacte risicofactor van de geselecteerde agent
+  const getAgeGroup = (leeftijd: number) => {
+    if (leeftijd <= 14) return '0-14';
+    if (leeftijd <= 24) return '15-24';
+    if (leeftijd <= 44) return '25-44';
+    if (leeftijd <= 64) return '45-64';
+    return '65+';
+  };
+
   const getSelectedNodeRisk = () => {
     if (!network || !selectedNodeId) return null;
     const node = network.nodes.find(n => n.id === selectedNodeId);
@@ -77,10 +85,15 @@ export function NetworkGeneration({ network, onNetworkGenerated, dataFactors }: 
       activeFactorsCount++;
     }
 
-    const fLeeftijd = getFactor('leeftijdsverdeling');
+    const fLeeftijd = getFactor('leeftijd');
     if (fLeeftijd?.enabled) {
-      const kwetsbaarPercentage = p.leeftijdsverdeling['65+'] + p.leeftijdsverdeling['0-14'];
-      totalRisk += mapDynamicRisk(kwetsbaarPercentage, 10, 50, fLeeftijd.minFactor, fLeeftijd.maxFactor);
+      const leeftijd = p.leeftijd ?? 0;
+      const ageRisk = leeftijd <= 14 || leeftijd >= 65
+        ? fLeeftijd.maxFactor
+        : leeftijd <= 24 || leeftijd >= 45
+          ? (fLeeftijd.minFactor + fLeeftijd.maxFactor) / 2
+          : fLeeftijd.minFactor;
+      totalRisk += ageRisk;
       activeFactorsCount++;
     }
 
@@ -134,7 +147,7 @@ export function NetworkGeneration({ network, onNetworkGenerated, dataFactors }: 
 
     const headers = [
       'id', 'label', 'buurtcode', 'wijkcode', 'bevolkingsomvang',
-      'leeftijd_0_14', 'leeftijd_15_24', 'leeftijd_25_44', 'leeftijd_45_64', 'leeftijd_65_plus',
+      'leeftijd', 'leeftijdsgroep',
       'huishoudgrootte', 'huishoudenSamenstelling', 'aandeelNietWesterseAchtergrond',
       'woningtype', 'bezettingsgraadWoning', 'gemiddeldBestedbaarInkomen', 'stedelijkheidsgraad',
       'opleidingsniveau_laag', 'opleidingsniveau_midden', 'opleidingsniveau_hoog',
@@ -151,7 +164,7 @@ export function NetworkGeneration({ network, onNetworkGenerated, dataFactors }: 
       if (!p) return;
       csvRows.push([
         escapeCsvValue(node.id), escapeCsvValue(node.label), escapeCsvValue(p.buurtcode), escapeCsvValue(p.wijkcode), escapeCsvValue(p.bevolkingsomvang),
-        escapeCsvValue(p.leeftijdsverdeling['0-14']), escapeCsvValue(p.leeftijdsverdeling['15-24']), escapeCsvValue(p.leeftijdsverdeling['25-44']), escapeCsvValue(p.leeftijdsverdeling['45-64']), escapeCsvValue(p.leeftijdsverdeling['65+']),
+        escapeCsvValue(p.leeftijd), escapeCsvValue(getAgeGroup(p.leeftijd ?? 0)),
         escapeCsvValue(p.huishoudgrootte), escapeCsvValue(p.huishoudenSamenstelling), escapeCsvValue(p.aandeelNietWesterseAchtergrond), escapeCsvValue(p.woningtype), escapeCsvValue(p.bezettingsgraadWoning), escapeCsvValue(p.gemiddeldBestedbaarInkomen), escapeCsvValue(p.stedelijkheidsgraad),
         escapeCsvValue(p.opleidingsniveau.laag), escapeCsvValue(p.opleidingsniveau.midden), escapeCsvValue(p.opleidingsniveau.hoog),
         escapeCsvValue(p.rwzi.id), escapeCsvValue(p.rwzi.naam), escapeCsvValue(p.rwzi.locatie), escapeCsvValue(p.rwzi.capaciteit),
@@ -214,39 +227,37 @@ export function NetworkGeneration({ network, onNetworkGenerated, dataFactors }: 
 
                       <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                         <div className="text-sm font-medium text-white">{node.label}</div>
+                        <div className="text-gray-400">Agent ID: {node.id}</div>
                         <div className="text-gray-400">Buurt: {p.buurtcode} | Wijk: {p.wijkcode}</div>
                       </div>
                       
                       <div className="space-y-2">
                         <div className="rounded-xl border border-white/5 bg-white/5 p-3">
-                          <span className="font-semibold text-white block mb-1">📊 Demografie & Huisvesting</span>
-                          <div>Omvang buurt: {p.bevolkingsomvang} inw.</div>
-                          <div>Samenstelling: {p.huishoudenSamenstelling}</div>
-                          <div>Bezettingsgraad / Grootte: {p.bezettingsgraadWoning} pers.</div>
+                          <span className="font-semibold text-white block mb-1">🧍 Agentgegevens</span>
                           <div>Woningtype: {p.woningtype}</div>
-                          <div className="mt-1 text-[11px] text-gray-400">
-                            Leeftijd: {p.leeftijdsverdeling['0-14']}% | {p.leeftijdsverdeling['15-24']}% | {p.leeftijdsverdeling['25-44']}% | {p.leeftijdsverdeling['45-64']}% | {p.leeftijdsverdeling['65+']}%
+                          <div>Huishoudgrootte: {p.huishoudgrootte}</div>
+                          <div>Huishoudensamenstelling: {p.huishoudenSamenstelling}</div>
+                          <div className="mt-2 text-[11px] text-gray-400">
+                            Leeftijd: {p.leeftijd} jaar | Leeftijdsgroep: {getAgeGroup(p.leeftijd ?? 0)}
                           </div>
                         </div>
 
                         <div className="rounded-xl border border-white/5 bg-white/5 p-3">
-                          <span className="font-semibold text-white block mb-1">💶 Sociaal-Economisch</span>
-                          <div>Bestedbaar inkomen: €{p.gemiddeldBestedbaarInkomen.toLocaleString('nl-NL')}</div>
+                          <span className="font-semibold text-white block mb-1">📍 Wijkcontext</span>
+                          <div>Buurtomvang: {p.bevolkingsomvang} inwoners</div>
+                          <div>Inkomen: €{p.gemiddeldBestedbaarInkomen.toLocaleString('nl-NL')}</div>
                           <div>Stedelijkheidsgraad: {p.stedelijkheidsgraad}</div>
                           <div>Niet-westerse achtergrond: {p.aandeelNietWesterseAchtergrond}%</div>
                           <div className="mt-1 text-[11px] text-gray-400">
-                            Opleiding: L: {p.opleidingsniveau.laag}% | M: {p.opleidingsniveau.midden}% | H: {p.opleidingsniveau.hoog}%
+                            Opleiding: laag {p.opleidingsniveau.laag}% / midden {p.opleidingsniveau.midden}% / hoog {p.opleidingsniveau.hoog}%
                           </div>
                         </div>
 
                         <div className="rounded-xl border border-white/5 bg-white/5 p-3">
-                          <span className="font-semibold text-white block mb-1">🏭 Infrastructuur & Omgeving</span>
-                          <div>{p.rwzi.id}: {p.rwzi.naam} ({p.rwzi.capaciteit} i.e.)</div>
-                          <div>Stroomgebied: {p.catchment.oppervlakteKm2} km²</div>
-                          <div>Afstand (lucht)haven: {p.nabijheidHavenKm} km</div>
-                          <div className="mt-1 text-[11px] text-gray-400">
-                            Landgebruik: Woon: {p.landgebruik.woongebied}% | Ind: {p.landgebruik.industrie}% | Agr: {p.landgebruik.agrarisch}%
-                          </div>
+                          <span className="font-semibold text-white block mb-1">🌍 Omgeving</span>
+                          <div>{p.rwzi.id}: {p.rwzi.naam}</div>
+                          <div>RWZI capaciteit: {p.rwzi.capaciteit}</div>
+                          <div>Havenafstand: {p.nabijheidHavenKm} km</div>
                         </div>
                       </div>
                     </div>

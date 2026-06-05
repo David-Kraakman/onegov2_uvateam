@@ -70,10 +70,15 @@ export function NetworkCanvas({ network, selectedNodeId, onNodeSelect, dataFacto
       activeFactorsCount++;
     }
 
-    const fLeeftijd = getFactor('leeftijdsverdeling');
+    const fLeeftijd = getFactor('leeftijd');
     if (fLeeftijd?.enabled) {
-      const kwetsbaarPercentage = p.leeftijdsverdeling['65+'] + p.leeftijdsverdeling['0-14'];
-      totalRisk += mapDynamicRisk(kwetsbaarPercentage, 10, 50, fLeeftijd.minFactor, fLeeftijd.maxFactor);
+      const leeftijd = p.leeftijd ?? 0;
+      const ageRisk = leeftijd <= 14 || leeftijd >= 65
+        ? fLeeftijd.maxFactor
+        : leeftijd <= 24 || leeftijd >= 45
+          ? (fLeeftijd.minFactor + fLeeftijd.maxFactor) / 2
+          : fLeeftijd.minFactor;
+      totalRisk += ageRisk;
       activeFactorsCount++;
     }
 

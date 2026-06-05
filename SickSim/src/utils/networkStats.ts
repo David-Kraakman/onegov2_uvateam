@@ -138,7 +138,6 @@ export function calculateFactorMultiplier(network: NetworkData | null, dataFacto
   const mapFactor = (normalized: number, minFactor: number, maxFactor: number) => minFactor + normalized * (maxFactor - minFactor);
 
   const hasProfiles = profiles.length > 0;
-  const uniqueAreaCount = hasProfiles ? new Set(profiles.map((profile) => `${profile.buurtcode}-${profile.wijkcode}`)).size : 8;
   const averagePopulation = hasProfiles ? average(profiles.map((profile) => profile.bevolkingsomvang)) : 6000;
   const averageHouseholdSize = hasProfiles ? average(profiles.map((profile) => profile.huishoudgrootte)) : 2.5;
   const averageNonWestern = hasProfiles ? average(profiles.map((profile) => profile.aandeelNietWesterseAchtergrond)) : 20;
@@ -147,30 +146,19 @@ export function calculateFactorMultiplier(network: NetworkData | null, dataFacto
   const averageIncome = hasProfiles ? average(profiles.map((profile) => profile.gemiddeldBestedbaarInkomen)) : 35000;
   const averageUrbanity = hasProfiles ? average(profiles.map((profile) => profile.stedelijkheidsgraad)) : 60;
   const averageLowEducation = hasProfiles ? average(profiles.map((profile) => profile.opleidingsniveau.laag)) : 0.3;
-  const averageRwziCapacity = hasProfiles ? average(profiles.map((profile) => profile.rwzi.capaciteit)) : 5000;
-  const averageCatchment = hasProfiles ? average(profiles.map((profile) => profile.catchment.aansluitingen)) : 14;
-  const averageLandWoon = hasProfiles ? average(profiles.map((profile) => profile.landgebruik.woongebied)) : 40;
-  const averageLandIndustry = hasProfiles ? average(profiles.map((profile) => profile.landgebruik.industrie)) : 15;
-  const averageLandAgrarisch = hasProfiles ? average(profiles.map((profile) => profile.landgebruik.agrarisch)) : 23;
-  const averagePortProximity = hasProfiles ? average(profiles.map((profile) => profile.nabijheidHavenKm)) : 30;
-  const averageChildShare = hasProfiles ? average(profiles.map((profile) => profile.leeftijdsverdeling['0-14'])) : 0.18;
-  const averageYoungAdultShare = hasProfiles ? average(profiles.map((profile) => profile.leeftijdsverdeling['15-24'] + profile.leeftijdsverdeling['25-44'])) : 0.4;
-  const averageSeniorShare = hasProfiles ? average(profiles.map((profile) => profile.leeftijdsverdeling['65+'])) : 0.18;
+  const averageChildShare = hasProfiles ? average(profiles.map((profile) => (profile.leeftijd <= 14 ? 1 : 0))) : 0.18;
+  const averageSeniorShare = hasProfiles ? average(profiles.map((profile) => (profile.leeftijd >= 65 ? 1 : 0))) : 0.18;
 
   const factorEffects = activeFactors.map((factor) => {
     const mapRange = (normalized: number) => mapFactor(normalized, factor.minFactor, factor.maxFactor);
 
-    if (factor.label.includes('Buurtcode / wijkcode')) {
-      return mapRange(normalize(uniqueAreaCount, 2, 15));
-    }
     if (factor.label.includes('Bevolkingsomvang')) {
       return mapRange(normalize(averagePopulation, 1000, 12000));
     }
-    if (factor.label.includes('Leeftijdsverdeling')) {
-      const seniorRisk = mapFactor(normalize(averageSeniorShare, 5, 30), 1, 1.5);
-      const childRisk = mapFactor(normalize(averageChildShare, 5, 30), 1, 1.2);
-      const youngAdultRisk = mapFactor(normalize(averageYoungAdultShare, 20, 70), 0.5, 1);
-      const ageRisk = clamp(1 + (seniorRisk - 1) + (childRisk - 1) - (1 - youngAdultRisk), 0.5, 1.5);
+    if (factor.label.includes('Leeftijd')) {
+      const seniorRisk = mapFactor(normalize(averageSeniorShare * 100, 5, 30), 1, 1.5);
+      const childRisk = mapFactor(normalize(averageChildShare * 100, 5, 30), 1, 1.2);
+      const ageRisk = clamp(1 + (seniorRisk - 1) + (childRisk - 1), 0.5, 1.5);
       return mapRange(normalize(ageRisk, 0.5, 1.5));
     }
     if (factor.label.includes('Huishoudgrootte')) {
@@ -193,24 +181,6 @@ export function calculateFactorMultiplier(network: NetworkData | null, dataFacto
     }
     if (factor.label.includes('Opleidingsniveau')) {
       return mapRange(normalize(averageLowEducation, 0.18, 0.42));
-    }
-    if (factor.label.includes('RWZI')) {
-      return mapRange(normalize(averageRwziCapacity, 1500, 8500));
-    }
-    if (factor.label.includes('Catchment')) {
-      return mapRange(normalize(averageCatchment, 4, 24));
-    }
-    if (factor.label.includes('woongebied')) {
-      return mapRange(normalize(averageLandWoon, 20, 65));
-    }
-    if (factor.label.includes('industrie')) {
-      return mapRange(normalize(averageLandIndustry, 5, 30));
-    }
-    if (factor.label.includes('agrarisch')) {
-      return mapRange(normalize(averageLandAgrarisch, 8, 38));
-    }
-    if (factor.label.includes('haven')) {
-      return mapRange(1 - normalize(averagePortProximity, 8, 95));
     }
     return 1;
   });

@@ -8,14 +8,11 @@ type DataFactorRowProps = {
 };
 
 function getFactorDescription(label: string) {
-  if (label.includes('Buurtcode / wijkcode')) {
-    return 'De minimale factor bepaalt de laagste transmissie-impact; de maximale factor bepaalt de hoogste transmissie-impact voor ruimtelijke spreiding.';
-  }
   if (label.includes('Bevolkingsomvang')) {
     return 'De minimale factor bepaalt de ondergrens van het effect van bevolkingsomvang; de maximale factor bepaalt de bovengrens.';
   }
-  if (label.includes('Leeftijdsverdeling')) {
-    return 'Leeftijdsverdeling kan de transmissie richting ouderen verhogen. Min factor bepaalt de ondergrens; max factor bepaalt de bovengrens. Kinderen krijgen geen lager risico omdat zij juist kwetsbaar zijn.';
+  if (label.includes('Leeftijd')) {
+    return 'Agentleeftijd bepaalt de kwetsbaarheid; kinderen en ouderen krijgen een hoger transmissierisico. Min factor bepaalt de ondergrens, max factor bepaalt de bovengrens.';
   }
   if (label.includes('Huishoudgrootte')) {
     return 'Huishoudgrootte kan het infectierisico vergroten. Min factor geeft het minimale effect, max factor de maximale effectsterkte.';
@@ -37,24 +34,6 @@ function getFactorDescription(label: string) {
   }
   if (label.includes('Opleidingsniveau')) {
     return 'De min/max factor bepaalt de onder- en bovengrens van het effect van opleidingsniveau.';
-  }
-  if (label.includes('RWZI')) {
-    return 'De min/max factor bepaalt de range van het effect van RWZI-capaciteit op de transmissie.';
-  }
-  if (label.includes('Catchment')) {
-    return 'De min/max factor bepaalt de range van het effect van catchment-oppervlaktes.';
-  }
-  if (label.includes('woongebied')) {
-    return 'De min/max factor bepaalt de range van het effect voor woongebied.';
-  }
-  if (label.includes('industrie')) {
-    return 'De min/max factor bepaalt de range van het effect voor industriegebied.';
-  }
-  if (label.includes('agrarisch')) {
-    return 'De min/max factor bepaalt de range van het agrarisch effect.';
-  }
-  if (label.includes('haven')) {
-    return 'De min/max factor bepaalt de range van het effect van nabijheid van een haven.';
   }
   return 'Factor beïnvloedt de transmissie op basis van lokale demografie en omgeving.';
 }

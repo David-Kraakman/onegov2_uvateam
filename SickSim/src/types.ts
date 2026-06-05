@@ -11,13 +11,7 @@ export type AgentProfile = {
   buurtcode: string;
   wijkcode: string;
   bevolkingsomvang: number;
-  leeftijdsverdeling: {
-    '0-14': number;
-    '15-24': number;
-    '25-44': number;
-    '45-64': number;
-    '65+': number;
-  };
+  leeftijd: number;
   huishoudgrootte: number;
   huishoudenSamenstelling: 'Eenpersoon' | 'Koppel' | 'Gezin' | 'Groot gezin';
   aandeelNietWesterseAchtergrond: number;
